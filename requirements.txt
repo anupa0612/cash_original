@@ -1,0 +1,12 @@
+Flask
+pandas
+numpy
+openpyxl
+XlsxWriter
+xlrd
+pdfplumber
+pdfminer.six
+Pillow
+pyinstaller
+pymongo
+gunicorn
