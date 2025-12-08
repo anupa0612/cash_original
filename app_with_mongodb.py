@@ -43,7 +43,9 @@ from flask import (
 # --------------------------------------------------------------------------------------
 # Paths (PyInstaller-friendly + user-writable data directories)
 # --------------------------------------------------------------------------------------
-DATA_DIR = os.path.join(BASE_DIR, "data")    
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))   # folder of this file
+DATA_DIR = os.path.join(BASE_DIR, "data")               # ./data under project
+os.makedirs(DATA_DIR, exist_ok=True)
 
 def _base_path() -> str:
     """Where templates/static live (sys._MEIPASS inside onefile EXE)."""
