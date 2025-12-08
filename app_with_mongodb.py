@@ -1307,6 +1307,39 @@ def build_rec_route():
             broker=request.form.get("broker", "Velocity"),  # NEW
         )
 
+@app.route('/view_rec', methods=['POST'])
+def view_rec():
+    """Load existing reconciliation data for an account without uploading files"""
+    try:
+        data = request.get_json() or {}
+        account = data.get('account', '').strip()
+        
+        if not account:
+            return jsonify({'error': 'Account is required'}), 400
+        
+        # Try to load from MongoDB first
+        rec_df = None
+        if mongo_handler and mongo_handler.is_connected():
+            rec_df = mongo_handler.load_session_rec(account)
+        
+        # Fallback to pickle file if MongoDB not available or no data
+        if rec_df is None:
+            pkl_path = os.path.join(DATA_DIR, f'rec_{account}.pkl')
+            if os.path.exists(pkl_path):
+                rec_df = pd.read_pickle(pkl_path)
+        
+        if rec_df is None or rec_df.empty:
+            return jsonify({'rows': [], 'message': 'No existing data found'})
+        
+        # Convert to JSON-serializable format
+        rec_df['Date'] = pd.to_datetime(rec_df['Date'], errors='coerce').dt.strftime('%Y-%m-%d')
+        rows = rec_df.to_dict('records')
+        
+        return jsonify({'rows': rows, 'account': account})
+    
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 
 @app.route("/run_automatch", methods=["POST"])
 def run_automatch():
