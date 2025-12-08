@@ -645,9 +645,7 @@
           </div>
         </div>
         <div class="form-actions" style="margin-top:8px">
-          <button type="button" class="btn btn-info" id="btnViewRec" onclick="viewExistingRec()">
-    <i class="bi bi-eye"></i> View Existing
-</button>
+          <button type="button" class="btn small" id="btnViewRec" onclick="viewExistingRec()">View Existing</button>
           <button class="btn primary" type="submit" title="Build the reconciliation view">Build Rec</button>
           <div class="chip">Ensure the Broker file has a <b>Settle Date</b> column.</div>
         </div>
@@ -1326,38 +1324,43 @@
       const box = document.getElementById('selectAll'); if (box) box.checked = false; applyFilters(); toast('Filters cleared');
     }
 
-    function viewExistingRec() {
-    const account = document.getElementById('account').value;
-    const broker = document.getElementById('broker').value;
-    
-    if (!account) {
-        alert('Please select an Account first.');
-        return;
-    }
-    
-    // Show loading indicator if you have one
-    
-    fetch('/view_rec', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({account: account, broker: broker})
-    })
+function viewExistingRec() {
+  const account =
+    (document.getElementById('accSelect')?.value ||
+     document.getElementById('accSelect2')?.value ||
+     document.getElementById('accountHidden')?.value || '').trim();
+
+  const broker = document.getElementById('broker')?.value || '';
+
+  if (!account) {
+    alert('Please select an Account first.');
+    return;
+  }
+
+  fetch('/view_rec', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ account, broker })
+  })
     .then(response => response.json())
     .then(data => {
-        if (data.error) {
-            alert(data.error);
-            return;
-        }
-        if (data.rows && data.rows.length > 0) {
-            renderTable(data.rows);  // use your existing table render function
-        } else {
-            alert('No existing reconciliation data found for this account.');
-        }
+      if (data.error) {
+        alert(data.error);
+        return;
+      }
+      if (data.rows && data.rows.length > 0) {
+        // TODO: implement how you want to show it
+        // For example, reuse your unmatched table:
+        rebuildUnmatchedTable(data.rows);
+      } else {
+        alert('No existing reconciliation data found for this account.');
+      }
     })
     .catch(err => {
-        alert('Error loading data: ' + err);
+      alert('Error loading data: ' + err);
     });
 }
+
 
 
     function applyFiltersM() {
@@ -1763,3 +1766,4 @@
 
 
 </html>
+
