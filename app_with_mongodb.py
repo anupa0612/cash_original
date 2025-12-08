@@ -43,7 +43,7 @@ from flask import (
 # --------------------------------------------------------------------------------------
 # Paths (PyInstaller-friendly + user-writable data directories)
 # --------------------------------------------------------------------------------------
-
+DATA_DIR = os.path.join(BASE_DIR, "data")    
 
 def _base_path() -> str:
     """Where templates/static live (sys._MEIPASS inside onefile EXE)."""
