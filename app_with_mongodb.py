@@ -1228,18 +1228,26 @@ def view_rec():
     broker_key = _pick_broker_key(broker_name)
     rec_key = make_rec_key(account, broker_key)
 
-    # Load from Mongo if available, else fallback to file
+    df = None
+
+    # 1) Try persistent copy for this Account + Broker
     if mongo_handler.is_connected():
         df = mongo_handler.load_session_rec(rec_key)
-    else:
+
+    # 2) Fallback: use current session rec if nothing persisted
+    if df is None or df.empty:
         df = _load_df("rec.pkl")
 
     if df is None or df.empty:
         return jsonify(ok=False, error="No existing reconciliation found for this Account + Broker."), 404
 
-    # send rows back to JS (rebuildUnmatchedTable expects RowID, etc.)
+    # 3) Make this the active working rec for this browser session
+    _save_df(df, "rec.pkl")
+
+    # 4) Send rows back so frontend can rebuild the table
     rows = df.to_dict(orient="records")
     return jsonify(ok=True, rows=rows)
+
 
 
 
@@ -1314,10 +1322,11 @@ def build_rec_route():
         rec[COL_AT] = pd.to_numeric(rec[COL_AT], errors="coerce").fillna(0.0)
         rec[COL_BRK] = pd.to_numeric(rec[COL_BRK], errors="coerce").fillna(0.0)
 
-        # 🔴 IMPORTANT: key = Account + Broker (normalized)
-        rec_key = make_rec_key(account, broker_key)
+        # 1) Always save as active session rec for this browser tab
+        _save_df(rec, "rec.pkl")
 
-        # Save to MongoDB per Account+Broker (fallback to file if Mongo off)
+        # 2) Also save a persistent copy per Account + Broker
+        rec_key = make_rec_key(account, broker_key)
         if mongo_handler.is_connected():
             mongo_handler.save_session_rec(
                 session_id=rec_key,
@@ -1331,9 +1340,7 @@ def build_rec_route():
                     "saved_at": datetime.utcnow(),
                 }
             )
-        else:
-            # old behaviour
-            _save_df(rec, "rec.pkl")
+
 
         # keep your state logic (for tolerance, EB, etc.)
         _save_state(
