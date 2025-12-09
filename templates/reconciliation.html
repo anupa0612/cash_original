@@ -1330,36 +1330,26 @@ function viewExistingRec() {
      document.getElementById('accSelect2')?.value ||
      document.getElementById('accountHidden')?.value || '').trim();
 
-  const broker = document.getElementById('broker')?.value || '';
-
   if (!account) {
     alert('Please select an Account first.');
     return;
   }
 
-  fetch('/view_rec', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ account, broker })
-  })
-    .then(response => response.json())
-    .then(data => {
-      if (data.error) {
-        alert(data.error);
-        return;
-      }
-      if (data.rows && data.rows.length > 0) {
-        // TODO: implement how you want to show it
-        // For example, reuse your unmatched table:
-        rebuildUnmatchedTable(data.rows);
-      } else {
-        alert('No existing reconciliation data found for this account.');
-      }
-    })
-    .catch(err => {
-      alert('Error loading data: ' + err);
-    });
+  // Optional: persist account selection into hidden & metadata
+  if (document.getElementById('accountHidden')) {
+    document.getElementById('accountHidden').value = account;
+  }
+
+  // Let backend use session / Mongo to show existing rec
+  const url = new URL('{{ url_for("recon") }}', window.location.origin);
+  url.searchParams.set('account', account);
+
+  const broker = document.getElementById('broker')?.value || '';
+  if (broker) url.searchParams.set('broker', broker);
+
+  window.location = url.toString();
 }
+
 
 
 
@@ -1766,4 +1756,5 @@ function viewExistingRec() {
 
 
 </html>
+
 
