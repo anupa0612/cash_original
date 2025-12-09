@@ -1324,33 +1324,41 @@
       const box = document.getElementById('selectAll'); if (box) box.checked = false; applyFilters(); toast('Filters cleared');
     }
 
-function viewExistingRec() {
-  const account =
-    (document.getElementById('accSelect')?.value ||
-     document.getElementById('accSelect2')?.value ||
-     document.getElementById('accountHidden')?.value || '').trim();
+async function viewExistingRec() {
+  // Adjust IDs if your selects use different ones
+  const accountEl = document.getElementById("account");
+  const brokerEl  = document.getElementById("broker");
+
+  const account = accountEl ? accountEl.value.trim() : "";
+  const broker  = brokerEl ? brokerEl.value.trim() : "";
 
   if (!account) {
-    alert('Please select an Account first.');
+    alert("Please select an account first.");
     return;
   }
 
-  // Optional: persist account selection into hidden & metadata
-  if (document.getElementById('accountHidden')) {
-    document.getElementById('accountHidden').value = account;
+  try {
+    const resp = await fetch("/view_rec", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ account, broker }),
+    });
+
+    const data = await resp.json();
+
+    if (!resp.ok || !data.ok) {
+      // Friendly message from backend
+      alert(data.error || "No existing reconciliation found for this Account + Broker.");
+      return;
+    }
+
+    // Success: rec is loaded into rec.pkl for this session → go to review screen
+    window.location.href = "/recon";
+  } catch (err) {
+    console.error(err);
+    alert("Something went wrong while loading the existing reconciliation.");
   }
-
-  // Let backend use session / Mongo to show existing rec
-  const url = new URL('{{ url_for("recon") }}', window.location.origin);
-  url.searchParams.set('account', account);
-
-  const broker = document.getElementById('broker')?.value || '';
-  if (broker) url.searchParams.set('broker', broker);
-
-  window.location = url.toString();
 }
-
-
 
 
     function applyFiltersM() {
@@ -1756,5 +1764,6 @@ function viewExistingRec() {
 
 
 </html>
+
 
 
