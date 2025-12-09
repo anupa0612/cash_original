@@ -1325,12 +1325,16 @@
     }
 
 async function viewExistingRec() {
-  // Adjust IDs if your selects use different ones
-  const accountEl = document.getElementById("account");
-  const brokerEl  = document.getElementById("broker");
+  // Read account from either upload-stage or review-stage selects
+  const account =
+    (document.getElementById("accSelect")?.value ||
+     document.getElementById("accSelect2")?.value ||
+     document.getElementById("accountHidden")?.value ||
+     ""
+    ).trim();
 
-  const account = accountEl ? accountEl.value.trim() : "";
-  const broker  = brokerEl ? brokerEl.value.trim() : "";
+  // Broker select already has id="broker" – this is fine
+  const broker = document.getElementById("broker")?.value || "";
 
   if (!account) {
     alert("Please select an account first.");
@@ -1347,18 +1351,18 @@ async function viewExistingRec() {
     const data = await resp.json();
 
     if (!resp.ok || !data.ok) {
-      // Friendly message from backend
       alert(data.error || "No existing reconciliation found for this Account + Broker.");
       return;
     }
 
-    // Success: rec is loaded into rec.pkl for this session → go to review screen
+    // Success – backend has loaded the saved rec into the session
     window.location.href = "/recon";
   } catch (err) {
     console.error(err);
     alert("Something went wrong while loading the existing reconciliation.");
   }
 }
+
 
 
     function applyFiltersM() {
@@ -1764,6 +1768,7 @@ async function viewExistingRec() {
 
 
 </html>
+
 
 
 
