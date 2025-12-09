@@ -400,12 +400,35 @@ def _sess_dir() -> Path:
 def _save_df(df: pd.DataFrame, name: str = "rec.pkl"):
     # Get session ID
     sid = _ensure_sid()
-    
-    # Save to MongoDB first (only for rec.pkl)
+
+    # --- Save to MongoDB ---
     if name == "rec.pkl" and mongo_handler.is_connected():
-        mongo_handler.save_session_rec(sid, df)
-    
-    # Always save to file as backup
+        # 1) Save per-browser-session copy (as you had before)
+        mongo_handler.save_session_rec(session_id=sid, df=df)
+
+        # 2) ALSO save per Account + Broker "existing rec"
+        try:
+            st = _load_state()
+            account = (st.get("account") or "").strip()
+            broker_key = _pick_broker_key(st.get("broker") or "")
+
+            if account and broker_key:
+                rec_key = make_rec_key(account, broker_key)
+                mongo_handler.save_session_rec(
+                    session_id=rec_key,
+                    df=df,
+                    metadata={
+                        "account": account,
+                        "broker": broker_key,
+                        "saved_at": datetime.utcnow(),
+                        "source": "autosync_from_working_rec",
+                    },
+                )
+        except Exception:
+            # Don't break file saving if Mongo sync fails
+            traceback.print_exc()
+
+    # --- Always save to local session folder as backup ---
     d = _sess_dir()
     with open(d / name, "wb") as f:
         pickle.dump(df, f)
