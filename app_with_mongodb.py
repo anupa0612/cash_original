@@ -1228,18 +1228,20 @@ def view_rec():
     broker_key = _pick_broker_key(broker_name)
     rec_key = make_rec_key(account, broker_key)
 
+    # 1) Only try persistent copy for this Account + Broker
     df = None
-
-    # 1) Try persistent copy for this Account + Broker
     if mongo_handler.is_connected():
         df = mongo_handler.load_session_rec(rec_key)
 
-    # 2) Fallback: use current session rec if nothing persisted
+    # 2) If nothing persisted → tell user clearly, don't use session fallback
     if df is None or df.empty:
-        df = _load_df("rec.pkl")
-
-    if df is None or df.empty:
-        return jsonify(ok=False, error="No existing reconciliation found for this Account + Broker."), 404
+        return (
+            jsonify(
+                ok=False,
+                error="No existing reconciliation found for this Account + Broker. Please build a new rec first.",
+            ),
+            404,
+        )
 
     # 3) Make this the active working rec for this browser session
     _save_df(df, "rec.pkl")
@@ -1247,7 +1249,6 @@ def view_rec():
     # 4) Send rows back so frontend can rebuild the table
     rows = df.to_dict(orient="records")
     return jsonify(ok=True, rows=rows)
-
 
 
 
@@ -1807,6 +1808,7 @@ def import_previous_rec():
         file = request.files.get("prev_rec")
         if not file:
             return _json_err("Please choose a previous rec file (.xlsx or .csv)", 400)
+
         data = file.read()
         file.stream.seek(0)
         fn = (file.filename or "").lower()
@@ -1825,8 +1827,8 @@ def import_previous_rec():
         if df is None:
             return _json_err("No active data", 400)
 
-        new_rows = new_rows[[COL_DATE, COL_SYMBOL,
-                             COL_DESC, COL_AT, COL_BRK, "Comments"]].copy()
+        # Normalize columns and flags
+        new_rows = new_rows[[COL_DATE, COL_SYMBOL, COL_DESC, COL_AT, COL_BRK, "Comments"]].copy()
         new_rows["OurFlag"] = ""
         new_rows["BrkFlag"] = ""
         new_rows["MatchID"] = ""
@@ -1835,12 +1837,32 @@ def import_previous_rec():
                    "Comments", "OurFlag", "BrkFlag", "MatchID"]].copy()
         merged = pd.concat([base, new_rows], ignore_index=True)
         merged["RowID"] = merged.index.astype(int) + 1
+
+        # 1) Save to current session
         _save_df(merged, "rec.pkl")
+
+        # 2) ALSO persist to Mongo for this Account + Broker
+        st = _load_state()
+        account = (st.get("account") or "").strip()
+        broker_key = _pick_broker_key(st.get("broker") or "")
+        if account and mongo_handler.is_connected():
+            rec_key = make_rec_key(account, broker_key)
+            mongo_handler.save_session_rec(
+                session_id=rec_key,
+                df=merged,
+                metadata={
+                    "account": account,
+                    "broker": broker_key,
+                    "saved_at": datetime.utcnow(),
+                    "source": "import_previous_rec",
+                },
+            )
 
         return _json_ok({"ok": True, "added": int(len(new_rows)), "um": _df_unmatched(merged)})
     except Exception as e:
         traceback.print_exc()
         return _json_err(f"Import failed: {e}", 500)
+
 
 # ---------- Manual Transactions Import (NEW) ----------
 
