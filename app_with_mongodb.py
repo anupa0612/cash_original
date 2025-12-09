@@ -1216,39 +1216,80 @@ def health():
 
 @app.route("/view_rec", methods=["POST"])
 def view_rec():
-    data = request.get_json(force=True) or {}
+    try:
+        # We expect JSON: { "account": "...", "broker": "..." }
+        data = request.get_json(force=True) or {}
 
-    account = (data.get("account") or "").strip()
-    broker_name = (data.get("broker") or "").strip()
+        account = (data.get("account") or "").strip()
+        broker_name = (data.get("broker") or "").strip()
 
-    if not account:
-        return jsonify(ok=False, error="Account is required"), 400
+        if not account:
+            return jsonify(ok=False, error="Please select an account first."), 400
 
-    # normalize broker exactly like in build_rec_route
-    broker_key = _pick_broker_key(broker_name)
-    rec_key = make_rec_key(account, broker_key)
+        # Normalize broker & build the same key used when saving
+        broker_key = _pick_broker_key(broker_name)
+        rec_key = make_rec_key(account, broker_key)
 
-    # 1) Only try persistent copy for this Account + Broker
-    df = None
-    if mongo_handler.is_connected():
-        df = mongo_handler.load_session_rec(rec_key)
+        # Only look in persistent store for this Account+Broker
+        df = None
+        if mongo_handler.is_connected():
+            df = mongo_handler.load_session_rec(rec_key)
 
-    # 2) If nothing persisted → tell user clearly, don't use session fallback
-    if df is None or df.empty:
-        return (
-            jsonify(
-                ok=False,
-                error="No existing reconciliation found for this Account + Broker. Please build a new rec first.",
-            ),
-            404,
-        )
+        # Nothing found → clear, friendly message back to UI
+        if df is None or df.empty:
+            return (
+                jsonify(
+                    ok=False,
+                    error=(
+                        "No existing reconciliation found for this Account + Broker. "
+                        "Please build a new rec first."
+                    ),
+                ),
+                404,
+            )
 
-    # 3) Make this the active working rec for this browser session
-    _save_df(df, "rec.pkl")
+        # Make sure the frame looks like a normal working rec
+        for col in [
+            COL_DATE,
+            COL_SYMBOL,
+            COL_DESC,
+            COL_AT,
+            COL_BRK,
+            "Comments",
+            "OurFlag",
+            "BrkFlag",
+            "MatchID",
+        ]:
+            if col not in df.columns:
+                df[col] = "" if col not in (COL_AT, COL_BRK) else 0.0
 
-    # 4) Send rows back so frontend can rebuild the table
-    rows = df.to_dict(orient="records")
-    return jsonify(ok=True, rows=rows)
+        df = df[
+            [
+                COL_DATE,
+                COL_SYMBOL,
+                COL_DESC,
+                COL_AT,
+                COL_BRK,
+                "Comments",
+                "OurFlag",
+                "BrkFlag",
+                "MatchID",
+            ]
+        ].copy()
+        df["RowID"] = range(1, len(df) + 1)
+
+        # Save as the active session rec
+        _save_df(df, "rec.pkl")
+
+        # Update state so /recon knows which account/broker we're on
+        _save_state(account=account, broker=broker_key)
+
+        # Frontend will redirect to /recon after success
+        return jsonify(ok=True)
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify(ok=False, error=f"Error loading existing reconciliation: {e}"), 500
+
 
 
 
