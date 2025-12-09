@@ -91,14 +91,6 @@ MONGODB_DB_NAME = os.environ.get("MONGODB_DB_NAME", "cash_recon")
 
 mongo_handler = MongoDBHandler(MONGODB_URI, MONGODB_DB_NAME)
 
-
-# Column constants
-COL_DATE = "Date"
-COL_DESC = "Description"
-COL_AT = "AT"
-COL_BRK = "Broker"
-COL_SYMBOL = "Symbol"
-
 def make_rec_key(account: str, broker: str) -> str:
     """
     Build a unique key for (Account + Broker)
@@ -115,6 +107,12 @@ def make_rec_key(account: str, broker: str) -> str:
 
     return f"{account}__{broker}"
 
+# Column constants
+COL_DATE = "Date"
+COL_DESC = "Description"
+COL_AT = "AT"
+COL_BRK = "Broker"
+COL_SYMBOL = "Symbol"
 
 
 def _pick_broker_key(name: str) -> str:
