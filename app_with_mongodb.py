@@ -99,6 +99,23 @@ COL_AT = "AT"
 COL_BRK = "Broker"
 COL_SYMBOL = "Symbol"
 
+def make_rec_key(account: str, broker: str) -> str:
+    """
+    Build a unique key for (Account + Broker)
+    so each combo has its own reconciliation.
+    """
+    account = (account or "").strip()
+    broker = (broker or "").strip()
+
+    if not account:
+        return "default"
+
+    if not broker:
+        return account  # if broker is empty, just use account
+
+    return f"{account}__{broker}"
+
+
 
 def _pick_broker_key(name: str) -> str:
     """Return our canonical broker key from any label/alias."""
@@ -1199,34 +1216,33 @@ def index():
 def health():
     return "OK", 200
 
-@app.route('/view_rec', methods=['POST'])
+@app.route("/view_rec", methods=["POST"])
 def view_rec():
-    """Load existing reconciliation data for the current session (by account just for display)."""
-    try:
-        data = request.get_json() or {}
-        account = (data.get('account') or '').strip()
+    data = request.get_json(force=True) or {}
 
-        if not account:
-            return jsonify({'error': 'Account is required'}), 400
+    account = (data.get("account") or "").strip()
+    broker_name = (data.get("broker") or "").strip()
 
-        # ✅ Load rec the same way the rest of the app does
-        rec_df = _load_df("rec.pkl")   # this will use Mongo first, then pickle backup
+    if not account:
+        return jsonify(ok=False, error="Account is required"), 400
 
-        if rec_df is None or rec_df.empty:
-            return jsonify({'rows': [], 'message': 'No existing data found'})
+    # normalize broker exactly like in build_rec_route
+    broker_key = _pick_broker_key(broker_name)
+    rec_key = make_rec_key(account, broker_key)
 
-        # Make Date nice
-        if 'Date' in rec_df.columns:
-            rec_df['Date'] = pd.to_datetime(
-                rec_df['Date'], errors='coerce'
-            ).dt.strftime('%Y-%m-%d')
+    # Load from Mongo if available, else fallback to file
+    if mongo_handler.is_connected():
+        df = mongo_handler.load_session_rec(rec_key)
+    else:
+        df = _load_df("rec.pkl")
 
-        rows = rec_df.to_dict('records')
-        return jsonify({'rows': rows, 'account': account})
+    if df is None or df.empty:
+        return jsonify(ok=False, error="No existing reconciliation found for this Account + Broker."), 404
 
-    except Exception as e:
-        traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
+    # send rows back to JS (rebuildUnmatchedTable expects RowID, etc.)
+    rows = df.to_dict(orient="records")
+    return jsonify(ok=True, rows=rows)
+
 
 
 
@@ -1292,19 +1308,45 @@ def build_rec_route():
 
         # NEW: Build rec according to broker rules
         rec = build_rec_by_broker(at_df, broker_df, broker_name)
+
         # Ensure numeric columns exist and are numeric (even when rec is empty)
         for c in (COL_AT, COL_BRK):
             if c not in rec.columns:
                 rec[c] = 0.0
-        rec[COL_AT] = pd.to_numeric(rec[COL_AT],  errors="coerce").fillna(0.0)
+        rec[COL_AT] = pd.to_numeric(rec[COL_AT], errors="coerce").fillna(0.0)
         rec[COL_BRK] = pd.to_numeric(rec[COL_BRK], errors="coerce").fillna(0.0)
 
-        _save_df(rec, "rec.pkl")
+        # 🔴 IMPORTANT: key = Account + Broker (normalized)
+        rec_key = make_rec_key(account, broker_key)
+
+        # Save to MongoDB per Account+Broker (fallback to file if Mongo off)
+        if mongo_handler.is_connected():
+            mongo_handler.save_session_rec(
+                session_id=rec_key,
+                df=rec,
+                metadata={
+                    "account": account,
+                    "broker": broker_key,
+                    "broker_name": broker_name,
+                    "start_date": start_date,
+                    "end_date": end_date,
+                    "saved_at": datetime.utcnow(),
+                }
+            )
+        else:
+            # old behaviour
+            _save_df(rec, "rec.pkl")
+
+        # keep your state logic (for tolerance, EB, etc.)
         _save_state(
-            tol=0.01, eb_at=None, eb_brk=None,
-            account=account, recon_date="",
+            tol=0.01,
+            eb_at=None,
+            eb_brk=None,
+            account=account,
+            recon_date="",
             broker=broker_key  # persist normalized broker
         )
+
 
         um = _df_unmatched(rec)
         stats = {
