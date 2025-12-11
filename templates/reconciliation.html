@@ -842,7 +842,7 @@
               {% for r in um %}
               {% set atv = r['AT'] if r['AT'] is not none else 0 %}
               {% set brv = r['Broker'] if r['Broker'] is not none else 0 %}
-              <tr data-rowid="{{ r['RowID'] }}">
+              <tr data-rowid="{{ r['RowID'] }}" class="draggable-row" draggable="true">
                 <td><input type="checkbox" class="pick" aria-label="Select row" onchange="updateSelection()" /></td>
                 <td>{{ r['DateKey'] }}</td>
                 <td class="cell-symbol editable" title="Double-click to edit Symbol">{{ r['Symbol'] }}</td>
@@ -1051,84 +1051,72 @@
     // make umTable available to all functions
     const umTable = document.getElementById('umTable');
 
-    // ------- Drag & Drop for Unmatched table -------
-    let dragSrcRow = null;
+// ------- Drag & Drop for Unmatched table (delegated) -------
+let dragSrcRow = null;
 
-    function handleDragStart(e) {
-      const tr = e.currentTarget;
-      // Don't start drag if clicking on checkbox or input
-      if (e.target.tagName === 'INPUT') return;
+if (umTable) {
+  // Start drag
+  umTable.addEventListener('dragstart', (e) => {
+    const tr = e.target.closest('tr.draggable-row');
+    if (!tr) return;
 
-      dragSrcRow = tr;
-      tr.classList.add('dragging');
-      e.dataTransfer.effectAllowed = 'move';
-      e.dataTransfer.setData('text/plain', tr.dataset.rowid || '');
+    // Don't start drag when clicking on inputs
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+    dragSrcRow = tr;
+    tr.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', tr.dataset.rowid || '');
+  });
+
+  // Drag over another row
+  umTable.addEventListener('dragover', (e) => {
+    const tr = e.target.closest('tr.draggable-row');
+    if (!tr || !dragSrcRow || tr === dragSrcRow) return;
+
+    e.preventDefault();         // allow drop
+    tr.classList.add('drag-over');
+    e.dataTransfer.dropEffect = 'move';
+  });
+
+  // Leave row
+  umTable.addEventListener('dragleave', (e) => {
+    const tr = e.target.closest('tr.draggable-row');
+    if (!tr) return;
+    tr.classList.remove('drag-over');
+  });
+
+  // Drop
+  umTable.addEventListener('drop', (e) => {
+    const tr = e.target.closest('tr.draggable-row');
+    if (!tr || !dragSrcRow || tr === dragSrcRow) return;
+
+    e.preventDefault();
+    tr.classList.remove('drag-over');
+
+    const tbody = tr.parentNode;
+    const rect = tr.getBoundingClientRect();
+    const offset = e.clientY - rect.top;
+    const before = offset < rect.height / 2;
+
+    if (before) {
+      tbody.insertBefore(dragSrcRow, tr);
+    } else {
+      tbody.insertBefore(dragSrcRow, tr.nextSibling);
     }
 
-    function handleDragOver(e) {
-      e.preventDefault(); // allow drop
-      const tr = e.currentTarget;
-      if (!dragSrcRow || tr === dragSrcRow) return;
-      tr.classList.add('drag-over');
-      e.dataTransfer.dropEffect = 'move';
-    }
+    // After reorder, recompute totals/selection
+    updateSelection();
+    computeReconTotals();
+  });
 
-    function handleDragLeave(e) {
-      e.currentTarget.classList.remove('drag-over');
-    }
-
-    function handleDrop(e) {
-      e.preventDefault();
-      const tr = e.currentTarget;
-      tr.classList.remove('drag-over');
-
-      if (!dragSrcRow || dragSrcRow === tr) return;
-
-      const tbody = tr.parentNode;
-      const rect = tr.getBoundingClientRect();
-      const offset = e.clientY - rect.top;
-      const before = offset < rect.height / 2;
-
-      if (before) {
-        tbody.insertBefore(dragSrcRow, tr);
-      } else {
-        tbody.insertBefore(dragSrcRow, tr.nextSibling);
-      }
-
-      // Recalculate totals / selection after reorder
-      updateSelection();
-      computeReconTotals();
-    }
-
-    function handleDragEnd(e) {
-      const tr = e.currentTarget;
-      tr.classList.remove('dragging');
-      if (!umTable) return;
-      umTable.querySelectorAll('.drag-over').forEach(row => row.classList.remove('drag-over'));
-    }
-
-    function initUnmatchedDnD() {
-      if (!umTable) return;
-      umTable.querySelectorAll('tbody tr').forEach(tr => {
-        // Skip the "no data" row
-        if (tr.dataset.empty === '1' || tr.querySelector('.note')) return;
-
-        tr.classList.add('draggable-row');
-        tr.setAttribute('draggable', 'true');
-
-        tr.removeEventListener('dragstart', handleDragStart);
-        tr.removeEventListener('dragover', handleDragOver);
-        tr.removeEventListener('dragleave', handleDragLeave);
-        tr.removeEventListener('drop', handleDrop);
-        tr.removeEventListener('dragend', handleDragEnd);
-
-        tr.addEventListener('dragstart', handleDragStart);
-        tr.addEventListener('dragover', handleDragOver);
-        tr.addEventListener('dragleave', handleDragLeave);
-        tr.addEventListener('drop', handleDrop);
-        tr.addEventListener('dragend', handleDragEnd);
-      });
-    }
+  // End drag
+  umTable.addEventListener('dragend', () => {
+    if (dragSrcRow) dragSrcRow.classList.remove('dragging');
+    umTable.querySelectorAll('.drag-over').forEach(row => row.classList.remove('drag-over'));
+    dragSrcRow = null;
+  });
+}
 
     function esc(s) {
       return String(s ?? '')
@@ -1629,8 +1617,6 @@
           tb.appendChild(tr);
         }
       }
-      // reattach drag & drop handlers for new rows
-      initUnmatchedDnD();
 
       applyFilters();
       computeReconTotals();
@@ -1949,3 +1935,4 @@
 </body>
 
 </html>
+
