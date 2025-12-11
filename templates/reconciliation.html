@@ -1050,6 +1050,12 @@
 
   <script>
 
+        if (umTable) {
+  initUnmatchedDnD();
+}
+        // make umTable available to all functions
+const umTable = document.getElementById('umTable');
+
     // ------- Drag & Drop for Unmatched table -------
 let dragSrcRow = null;
 
@@ -1129,9 +1135,7 @@ function initUnmatchedDnD() {
   });
 }
 
-    if (umTable) {
-  initUnmatchedDnD();
-}
+
 
 
     function esc(s) {
@@ -1218,7 +1222,6 @@ function initUnmatchedDnD() {
     });
 
     // ---------- Common helpers ----------
-    const umTable = document.getElementById('umTable');
     const selChip = document.getElementById('selChip');
     const diffChip = document.getElementById('diffChip');
     const ebDiffEl = document.getElementById('ebDiff');
@@ -1874,6 +1877,7 @@ function rebuildUnmatchedTable(rows) {
 
 
 </html>
+
 
 
 
