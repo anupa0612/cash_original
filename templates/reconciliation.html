@@ -1050,11 +1050,8 @@
 
   <script>
 
-        if (umTable) {
-  initUnmatchedDnD();
-}
-        // make umTable available to all functions
-const umTable = document.getElementById('umTable');
+ // make umTable available to all functions
+  const umTable = document.getElementById('umTable');
 
     // ------- Drag & Drop for Unmatched table -------
 let dragSrcRow = null;
@@ -1871,12 +1868,17 @@ function rebuildUnmatchedTable(rows) {
     applyBrokerMode();
   })();
 
+    document.addEventListener('DOMContentLoaded', () => {
+    if (umTable) initUnmatchedDnD();
+  });
+
 
   </script>
 </body>
 
 
 </html>
+
 
 
 
