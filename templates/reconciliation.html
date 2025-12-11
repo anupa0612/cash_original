@@ -1849,14 +1849,15 @@ function rebuildUnmatchedTable(rows) {
       }
     }
 
-    async function goToHome() {
+window.goToHome = async function () {
   try {
     await fetch('{{ url_for("reset_session") }}', { method: 'POST' });
     window.location = '{{ url_for("index") }}';
   } catch (e) {
     window.location = '{{ url_for("index") }}';
   }
-}
+};
+
 
     function applyBrokerMode() {
       const v = (brSel?.value || '').toLowerCase();
@@ -1878,6 +1879,7 @@ function rebuildUnmatchedTable(rows) {
 
 
 </html>
+
 
 
 
