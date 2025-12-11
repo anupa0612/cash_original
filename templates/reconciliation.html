@@ -445,20 +445,19 @@
     }
 
     /* Drag & drop states for unmatched rows */
-      .draggable-row {
-        cursor: grab;
-      }
-      
-      .draggable-row.dragging {
-        opacity: 0.6;
-        cursor: grabbing;
-      }
-      
-      .draggable-row.drag-over {
-        outline: 1px dashed var(--accent);
-        background: rgba(96, 165, 250, 0.12);
-      }
+    .draggable-row {
+      cursor: grab;
+    }
 
+    .draggable-row.dragging {
+      opacity: 0.6;
+      cursor: grabbing;
+    }
+
+    .draggable-row.drag-over {
+      outline: 1px dashed var(--accent);
+      background: rgba(96, 165, 250, 0.12);
+    }
 
     #mTable th:nth-child(6),
     #mTable td:nth-child(6),
@@ -576,16 +575,16 @@
 <body>
   <header id="appHeader" aria-label="Main header">
     <div class="nav">
-        <a href="javascript:void(0)" onclick="goToHome()" class="brand">
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="M12 3l8.66 5v8L12 21l-8.66-5V8L12 3z" stroke="#38bdf8" stroke-width="1.4" />
-            <circle cx="12" cy="12" r="2.2" fill="#38bdf8" />
-          </svg>
-          <div>
-            <h1>Cash Reconciliation · Pro</h1>
-            <div class="tag">Pick account → date range → Upload AT & Broker → Build Rec → Auto-match → Export</div>
-          </div>
-        </a>
+      <a href="javascript:void(0)" onclick="goToHome()" class="brand">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M12 3l8.66 5v8L12 21l-8.66-5V8L12 3z" stroke="#38bdf8" stroke-width="1.4" />
+          <circle cx="12" cy="12" r="2.2" fill="#38bdf8" />
+        </svg>
+        <div>
+          <h1>Cash Reconciliation · Pro</h1>
+          <div class="tag">Pick account → date range → Upload AT & Broker → Build Rec → Auto-match → Export</div>
+        </div>
+      </a>
       <div class="toolbar">
         <a class="btn ghost" href="{{ url_for('index') }}" title="Start a fresh upload">New Upload</a>
         <button class="btn bad" onclick="resetSession()" title="Clear session and start over">Reset</button>
@@ -635,8 +634,8 @@
           <div class="field">
             <label for="broker_file" id="brokerFileLabel">Broker File (.csv,.xlsx or .pdf)</label>
             <!-- keep the same name the backend expects -->
-          <input id="broker_file" type="file" name="broker_file" accept=".csv" multiple webkitdirectory directory />
-          <div id="brokerHelp" class="note" style="margin-top:6px"></div>
+            <input id="broker_file" type="file" name="broker_file" accept=".csv" multiple webkitdirectory directory />
+            <div id="brokerHelp" class="note" style="margin-top:6px"></div>
           </div>
           <!-- Broker select -->
           <div class="field" style="min-width:220px">
@@ -649,7 +648,7 @@
               <option value="scb" {{ 'selected' if (broker|default('Velocity'))=='scb' else '' }}>SCB</option>
               <option value="Riyadh Capital" {{ 'selected' if (broker|default('Velocity'))=='Riyadh Capital' else '' }}>
                 Riyadh Capital</option>
-               <option value="GTNA" {{ 'selected' if (broker|default('Velocity'))=='GTNA' else '' }}>GTNA</option>
+              <option value="GTNA" {{ 'selected' if (broker|default('Velocity'))=='GTNA' else '' }}>GTNA</option>
             </select>
           </div>
           <div class="field">
@@ -1049,91 +1048,87 @@
   <div id="toast" aria-live="polite" aria-atomic="true"></div>
 
   <script>
-
- // make umTable available to all functions
-  const umTable = document.getElementById('umTable');
+    // make umTable available to all functions
+    const umTable = document.getElementById('umTable');
 
     // ------- Drag & Drop for Unmatched table -------
-let dragSrcRow = null;
+    let dragSrcRow = null;
 
-function handleDragStart(e) {
-  const tr = e.currentTarget;
-  // Don't start drag if clicking on checkbox or input
-  if (e.target.tagName === 'INPUT') return;
+    function handleDragStart(e) {
+      const tr = e.currentTarget;
+      // Don't start drag if clicking on checkbox or input
+      if (e.target.tagName === 'INPUT') return;
 
-  dragSrcRow = tr;
-  tr.classList.add('dragging');
-  e.dataTransfer.effectAllowed = 'move';
-  e.dataTransfer.setData('text/plain', tr.dataset.rowid || '');
-}
+      dragSrcRow = tr;
+      tr.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', tr.dataset.rowid || '');
+    }
 
-function handleDragOver(e) {
-  e.preventDefault(); // allow drop
-  const tr = e.currentTarget;
-  if (!dragSrcRow || tr === dragSrcRow) return;
-  tr.classList.add('drag-over');
-  e.dataTransfer.dropEffect = 'move';
-}
+    function handleDragOver(e) {
+      e.preventDefault(); // allow drop
+      const tr = e.currentTarget;
+      if (!dragSrcRow || tr === dragSrcRow) return;
+      tr.classList.add('drag-over');
+      e.dataTransfer.dropEffect = 'move';
+    }
 
-function handleDragLeave(e) {
-  e.currentTarget.classList.remove('drag-over');
-}
+    function handleDragLeave(e) {
+      e.currentTarget.classList.remove('drag-over');
+    }
 
-function handleDrop(e) {
-  e.preventDefault();
-  const tr = e.currentTarget;
-  tr.classList.remove('drag-over');
+    function handleDrop(e) {
+      e.preventDefault();
+      const tr = e.currentTarget;
+      tr.classList.remove('drag-over');
 
-  if (!dragSrcRow || dragSrcRow === tr) return;
+      if (!dragSrcRow || dragSrcRow === tr) return;
 
-  const tbody = tr.parentNode;
-  const rect = tr.getBoundingClientRect();
-  const offset = e.clientY - rect.top;
-  const before = offset < rect.height / 2;
+      const tbody = tr.parentNode;
+      const rect = tr.getBoundingClientRect();
+      const offset = e.clientY - rect.top;
+      const before = offset < rect.height / 2;
 
-  if (before) {
-    tbody.insertBefore(dragSrcRow, tr);
-  } else {
-    tbody.insertBefore(dragSrcRow, tr.nextSibling);
-  }
+      if (before) {
+        tbody.insertBefore(dragSrcRow, tr);
+      } else {
+        tbody.insertBefore(dragSrcRow, tr.nextSibling);
+      }
 
-  // Recalculate totals / selection after reorder
-  updateSelection();
-  computeReconTotals();
-}
+      // Recalculate totals / selection after reorder
+      updateSelection();
+      computeReconTotals();
+    }
 
-function handleDragEnd(e) {
-  const tr = e.currentTarget;
-  tr.classList.remove('dragging');
-  if (!umTable) return;
-  umTable.querySelectorAll('.drag-over').forEach(row => row.classList.remove('drag-over'));
-}
+    function handleDragEnd(e) {
+      const tr = e.currentTarget;
+      tr.classList.remove('dragging');
+      if (!umTable) return;
+      umTable.querySelectorAll('.drag-over').forEach(row => row.classList.remove('drag-over'));
+    }
 
-function initUnmatchedDnD() {
-  if (!umTable) return;
-  umTable.querySelectorAll('tbody tr').forEach(tr => {
-    // Skip the "no data" row
-    if (tr.dataset.empty === '1' || tr.querySelector('.note')) return;
+    function initUnmatchedDnD() {
+      if (!umTable) return;
+      umTable.querySelectorAll('tbody tr').forEach(tr => {
+        // Skip the "no data" row
+        if (tr.dataset.empty === '1' || tr.querySelector('.note')) return;
 
-    tr.classList.add('draggable-row');
-    tr.setAttribute('draggable', 'true');
+        tr.classList.add('draggable-row');
+        tr.setAttribute('draggable', 'true');
 
-    tr.removeEventListener('dragstart', handleDragStart);
-    tr.removeEventListener('dragover', handleDragOver);
-    tr.removeEventListener('dragleave', handleDragLeave);
-    tr.removeEventListener('drop', handleDrop);
-    tr.removeEventListener('dragend', handleDragEnd);
+        tr.removeEventListener('dragstart', handleDragStart);
+        tr.removeEventListener('dragover', handleDragOver);
+        tr.removeEventListener('dragleave', handleDragLeave);
+        tr.removeEventListener('drop', handleDrop);
+        tr.removeEventListener('dragend', handleDragEnd);
 
-    tr.addEventListener('dragstart', handleDragStart);
-    tr.addEventListener('dragover', handleDragOver);
-    tr.addEventListener('dragleave', handleDragLeave);
-    tr.addEventListener('drop', handleDrop);
-    tr.addEventListener('dragend', handleDragEnd);
-  });
-}
-
-
-
+        tr.addEventListener('dragstart', handleDragStart);
+        tr.addEventListener('dragover', handleDragOver);
+        tr.addEventListener('dragleave', handleDragLeave);
+        tr.addEventListener('drop', handleDrop);
+        tr.addEventListener('dragend', handleDragEnd);
+      });
+    }
 
     function esc(s) {
       return String(s ?? '')
@@ -1149,11 +1144,29 @@ function initUnmatchedDnD() {
     // (optional) make sure they're global
     window.esc = esc;
 
-    (function () { function setOffsets() { const h = document.getElementById('appHeader')?.offsetHeight || 76; document.documentElement.style.setProperty('--header-h', h + 'px') } window.addEventListener('load', setOffsets); window.addEventListener('resize', setOffsets); setOffsets(); })();
+    (function () {
+      function setOffsets() {
+        const h = document.getElementById('appHeader')?.offsetHeight || 76;
+        document.documentElement.style.setProperty('--header-h', h + 'px')
+      }
+      window.addEventListener('load', setOffsets);
+      window.addEventListener('resize', setOffsets);
+      setOffsets();
+    })();
 
-    function toast(msg) { const box = document.getElementById('toast'); if (!box) { console.log(msg); return } const el = document.createElement('div'); el.className = 'toast-item'; el.textContent = msg; box.appendChild(el); setTimeout(() => { el.style.opacity = '0' }, 2600); setTimeout(() => { box.removeChild(el) }, 3000) }
+    function toast(msg) {
+      const box = document.getElementById('toast'); if (!box) { console.log(msg); return }
+      const el = document.createElement('div'); el.className = 'toast-item'; el.textContent = msg; box.appendChild(el);
+      setTimeout(() => { el.style.opacity = '0' }, 2600);
+      setTimeout(() => { box.removeChild(el) }, 3000)
+    }
 
-    async function resetSession() { try { await fetch('{{ url_for("reset_session") }}', { method: 'POST' }); window.location = '{{ url_for("index") }}' } catch (e) { toast('Reset failed') } }
+    async function resetSession() {
+      try {
+        await fetch('{{ url_for("reset_session") }}', { method: 'POST' });
+        window.location = '{{ url_for("index") }}'
+      } catch (e) { toast('Reset failed') }
+    }
 
     // ---------- Account wiring ----------
     const accSel1 = document.getElementById('accSelect');
@@ -1162,15 +1175,30 @@ function initUnmatchedDnD() {
     const accNew2 = document.getElementById('accNew2');
     const hiddenAcc = document.getElementById('accountHidden');
 
-    function setAccountValue(val) { if (hiddenAcc) hiddenAcc.value = val || ''; if (accSel1) accSel1.value = val || ''; if (accSel2) accSel2.value = val || ''; saveMetaDebounced() }
+    function setAccountValue(val) {
+      if (hiddenAcc) hiddenAcc.value = val || '';
+      if (accSel1) accSel1.value = val || '';
+      if (accSel2) accSel2.value = val || '';
+      saveMetaDebounced()
+    }
     if (accSel1) accSel1.addEventListener('change', () => setAccountValue(accSel1.value));
     if (accSel2) accSel2.addEventListener('change', () => setAccountValue(accSel2.value));
 
-    async function addAccount() { const v = (accNew1?.value || '').trim(); if (!v) { toast('Enter an account'); return } await addAccountCommon(v); accNew1.value = '' }
-    async function addAccount2() { const v = (accNew2?.value || '').trim(); if (!v) { toast('Enter an account'); return } await addAccountCommon(v); accNew2.value = '' }
+    async function addAccount() {
+      const v = (accNew1?.value || '').trim(); if (!v) { toast('Enter an account'); return }
+      await addAccountCommon(v); accNew1.value = ''
+    }
+    async function addAccount2() {
+      const v = (accNew2?.value || '').trim(); if (!v) { toast('Enter an account'); return }
+      await addAccountCommon(v); accNew2.value = ''
+    }
     async function addAccountCommon(v) {
       try {
-        const r = await fetch('{{ url_for("accounts_add") }}', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }, body: JSON.stringify({ account: v }) });
+        const r = await fetch('{{ url_for("accounts_add") }}', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify({ account: v })
+        });
         const j = await r.json(); if (!r.ok || !j.ok) { toast(j.error || 'Add failed'); return }
         const opts = (j.accounts || []).map(a => `<option value="${a}" ${a === j.selected ? 'selected' : ''}>${a}</option>`).join('');
         if (accSel1) accSel1.innerHTML = `<option value="">-- Select account --</option>${opts}`;
@@ -1182,7 +1210,11 @@ function initUnmatchedDnD() {
       const acc = (accSel1?.value || accSel2?.value || '').trim(); if (!acc) { toast('Choose an account'); return }
       if (!confirm(`Delete account "${acc}"? This removes its saved data folder.`)) return;
       try {
-        const r = await fetch('{{ url_for("accounts_delete") }}', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }, body: JSON.stringify({ account: acc }) });
+        const r = await fetch('{{ url_for("accounts_delete") }}', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify({ account: acc })
+        });
         const j = await r.json(); if (!r.ok || !j.ok) { toast(j.error || 'Delete failed'); return }
         const opts = (j.accounts || []).map(a => `<option value="${a}" ${a === j.selected ? 'selected' : ''}>${a}</option>`).join('');
         if (accSel1) accSel1.innerHTML = `<option value="">-- Select account --</option>${opts}`;
@@ -1207,7 +1239,13 @@ function initUnmatchedDnD() {
         tol: tolEl ? tolEl.value : undefined,
         broker: document.getElementById('broker')?.value
       };
-      try { await fetch('{{ url_for("save_meta") }}', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }, body: JSON.stringify(payload) }) } catch (e) { }
+      try {
+        await fetch('{{ url_for("save_meta") }}', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify(payload)
+        })
+      } catch (e) { }
       computeReconTotals();
     }, 400);
 
@@ -1227,7 +1265,10 @@ function initUnmatchedDnD() {
     const filterSymbolEl = document.getElementById('filterSymbol');
     const filterDescEl = document.getElementById('filterDesc');
 
-    function fmtMoney(v) { const n = Number(v); if (!isFinite(n) || Math.abs(n) < 1e-9) return ''; return n.toFixed(2) }
+    function fmtMoney(v) {
+      const n = Number(v); if (!isFinite(n) || Math.abs(n) < 1e-9) return '';
+      return n.toFixed(2)
+    }
     function writeDock() {
       const dockSel = document.querySelector('#dockSel b'); const dockDelta = document.querySelector('#dockDelta b');
       if (dockSel && selChip) dockSel.textContent = selChip.querySelector('b').textContent || '0';
@@ -1331,10 +1372,14 @@ function initUnmatchedDnD() {
       tbody.append(...rows);
     }
     if (umTable) {
-      umTable.querySelector('thead tr').addEventListener('click', (e) => { const th = e.target.closest('th[data-sort]'); if (th) sortTable(umTable, parseInt(th.dataset.sort, 10)) });
+      umTable.querySelector('thead tr').addEventListener('click', (e) => {
+        const th = e.target.closest('th[data-sort]'); if (th) sortTable(umTable, parseInt(th.dataset.sort, 10))
+      });
     }
     if (mTable) {
-      mTable.querySelector('thead tr').addEventListener('click', (e) => { const th = e.target.closest('th[data-sort]'); if (th) sortTable(mTable, parseInt(th.dataset.sort, 10)) });
+      mTable.querySelector('thead tr').addEventListener('click', (e) => {
+        const th = e.target.closest('th[data-sort]'); if (th) sortTable(mTable, parseInt(th.dataset.sort, 10))
+      });
     }
 
     // Inline comments (Unmatched + Matched)
@@ -1361,7 +1406,11 @@ function initUnmatchedDnD() {
     async function saveComment(cell, rowid) {
       const val = cell.querySelector('input')?.value || '';
       try {
-        const r = await fetch('{{ url_for("update_comment") }}', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }, body: JSON.stringify({ rowid, text: val }) });
+        const r = await fetch('{{ url_for("update_comment") }}', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify({ rowid, text: val })
+        });
         await r.json(); cell.textContent = val; toast('Comment saved');
       } catch { cell.textContent = val; toast('Comment saved (offline)') }
     }
@@ -1389,7 +1438,10 @@ function initUnmatchedDnD() {
           } catch (e) { cell.textContent = curr; toast('Update failed') }
         }
         input.addEventListener('blur', commit);
-        input.addEventListener('keydown', (ke) => { if (ke.key === 'Enter') { input.blur(); } else if (ke.key === 'Escape') { cell.textContent = curr; } });
+        input.addEventListener('keydown', (ke) => {
+          if (ke.key === 'Enter') { input.blur(); }
+          else if (ke.key === 'Escape') { cell.textContent = curr; }
+        });
       });
     }
     makeSymbolEditable(umTable, '.cell-symbol.editable');
@@ -1411,7 +1463,8 @@ function initUnmatchedDnD() {
       const existingEmpty = umTable.querySelector('tbody tr[data-empty="1"]');
       if (visibleCount === 0) {
         if (!existingEmpty) {
-          const tr = document.createElement('tr'); tr.setAttribute('data-empty', '1'); tr.innerHTML = `<td colspan="8" class="note" style="padding:16px">No rows match your filter.</td>`;
+          const tr = document.createElement('tr'); tr.setAttribute('data-empty', '1');
+          tr.innerHTML = `<td colspan="8" class="note" style="padding:16px">No rows match your filter.</td>`;
           umTable.querySelector('tbody').appendChild(tr)
         }
       } else if (existingEmpty) { existingEmpty.remove() }
@@ -1425,46 +1478,44 @@ function initUnmatchedDnD() {
       const box = document.getElementById('selectAll'); if (box) box.checked = false; applyFilters(); toast('Filters cleared');
     }
 
-async function viewExistingRec() {
-  // Read account from either upload-stage or review-stage selects
-  const account =
-    (document.getElementById("accSelect")?.value ||
-     document.getElementById("accSelect2")?.value ||
-     document.getElementById("accountHidden")?.value ||
-     ""
-    ).trim();
+    // Make viewExistingRec explicitly global for inline onclick
+    window.viewExistingRec = async function () {
+      // Read account from either upload-stage or review-stage selects
+      const account =
+        (document.getElementById("accSelect")?.value ||
+          document.getElementById("accSelect2")?.value ||
+          document.getElementById("accountHidden")?.value ||
+          ""
+        ).trim();
 
-  // Broker select already has id="broker" – this is fine
-  const broker = document.getElementById("broker")?.value || "";
+      const broker = document.getElementById("broker")?.value || "";
 
-  if (!account) {
-    alert("Please select an account first.");
-    return;
-  }
+      if (!account) {
+        alert("Please select an account first.");
+        return;
+      }
 
-  try {
-    const resp = await fetch("/view_rec", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ account, broker }),
-    });
+      try {
+        const resp = await fetch("{{ url_for('view_rec') }}", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ account, broker }),
+        });
 
-    const data = await resp.json();
+        const data = await resp.json();
 
-    if (!resp.ok || !data.ok) {
-      alert(data.error || "No existing reconciliation found for this Account + Broker.");
-      return;
-    }
+        if (!resp.ok || !data.ok) {
+          alert(data.error || "No existing reconciliation found for this Account + Broker.");
+          return;
+        }
 
-    // Success – backend has loaded the saved rec into the session
-    window.location.href = "/recon";
-  } catch (err) {
-    console.error(err);
-    alert("Something went wrong while loading the existing reconciliation.");
-  }
-}
-
-
+        // Success – backend has loaded the saved rec into the session
+        window.location.href = "{{ url_for('recon') }}";
+      } catch (err) {
+        console.error(err);
+        alert("Something went wrong while loading the existing reconciliation.");
+      }
+    };
 
     function applyFiltersM() {
       if (!mTable) return;
@@ -1483,7 +1534,8 @@ async function viewExistingRec() {
       const existingEmpty = mTable.querySelector('tbody tr[data-empty="1"]');
       if (visibleCount === 0) {
         if (!existingEmpty) {
-          const tr = document.createElement('tr'); tr.setAttribute('data-empty', '1'); tr.innerHTML = `<td colspan="10" class="note" style="padding:16px">No rows match your filter.</td>`;
+          const tr = document.createElement('tr'); tr.setAttribute('data-empty', '1');
+          tr.innerHTML = `<td colspan="10" class="note" style="padding:16px">No rows match your filter.</td>`;
           mTable.querySelector('tbody').appendChild(tr)
         }
       } else if (existingEmpty) { existingEmpty.remove() }
@@ -1494,7 +1546,9 @@ async function viewExistingRec() {
     if (filterDescMEl) filterDescMEl.addEventListener('input', debouncedFilterM);
     if (filterMatchIDMEl) filterMatchIDMEl.addEventListener('input', debouncedFilterM);
     function clearFiltersM() {
-      if (filterSymbolMEl) filterSymbolMEl.value = ''; if (filterDescMEl) filterDescMEl.value = ''; if (filterMatchIDMEl) filterMatchIDMEl.value = '';
+      if (filterSymbolMEl) filterSymbolMEl.value = '';
+      if (filterDescMEl) filterDescMEl.value = '';
+      if (filterMatchIDMEl) filterMatchIDMEl.value = '';
       applyFiltersM(); toast('Filters cleared')
     }
 
@@ -1523,9 +1577,14 @@ async function viewExistingRec() {
     // Actions
     async function manualPair() {
       const ids = getSelectedRowIDs(); if (ids.length === 0) { toast('Select at least one row'); return }
-      const res = await fetch('{{ url_for("manual_pair") }}', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }, body: JSON.stringify({ rowids: ids }) });
+      const res = await fetch('{{ url_for("manual_pair") }}', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({ rowids: ids })
+      });
       if (!res.ok) { const t = await res.text(); toast('Pairing failed: ' + t); return }
-      const j = await res.json(); rebuildUnmatchedTable(j.um || []); document.getElementById('selChip').querySelector('b').textContent = 0;
+      const j = await res.json(); rebuildUnmatchedTable(j.um || []);
+      document.getElementById('selChip').querySelector('b').textContent = 0;
       document.getElementById('diffChip').querySelector('b').textContent = '0.00'; writeDock(); toast('Manual match complete')
     }
     async function runAutoMatch() {
@@ -1547,18 +1606,18 @@ async function viewExistingRec() {
       } catch (err) { toast('Auto-match failed: ' + (err?.message || err)) }
     }
 
-function rebuildUnmatchedTable(rows) {
-  const tb = umTable?.querySelector('tbody'); if (!tb) return; tb.innerHTML = '';
-  if (!rows || rows.length === 0) {
-    const tr = document.createElement('tr');
-    tr.setAttribute('data-empty', '1');
-    tr.innerHTML = `<td colspan="8" class="note" style="padding:16px">No unmatched rows.</td>`;
-    tb.appendChild(tr);
-  } else {
-    for (const r of rows) {
-      const tr = document.createElement('tr'); tr.dataset.rowid = r.RowID;
-      const at = Number(r.AT) || 0; const br = Number(r.Broker) || 0; const diff = Number((br - at).toFixed(2));
-      tr.innerHTML = `
+    function rebuildUnmatchedTable(rows) {
+      const tb = umTable?.querySelector('tbody'); if (!tb) return; tb.innerHTML = '';
+      if (!rows || rows.length === 0) {
+        const tr = document.createElement('tr');
+        tr.setAttribute('data-empty', '1');
+        tr.innerHTML = `<td colspan="8" class="note" style="padding:16px">No unmatched rows.</td>`;
+        tb.appendChild(tr);
+      } else {
+        for (const r of rows) {
+          const tr = document.createElement('tr'); tr.dataset.rowid = r.RowID;
+          const at = Number(r.AT) || 0; const br = Number(r.Broker) || 0; const diff = Number((br - at).toFixed(2));
+          tr.innerHTML = `
         <td><input type="checkbox" class="pick" aria-label="Select row" onchange="updateSelection()" /></td>
         <td>${esc(r.DateKey || '')}</td>
         <td class="cell-symbol editable" title="Double-click to edit Symbol">${esc(r.Symbol || '')}</td>
@@ -1567,27 +1626,34 @@ function rebuildUnmatchedTable(rows) {
         <td class="money">${br ? br.toFixed(2) : ''}</td>
         <td class="money ${(diff < 0) ? 'neg' : (diff > 0) ? 'pos' : ''}">${diff.toFixed(2)}</td>
         <td class="comment-cell" title="Double-click to edit comment">${esc(r.Comments || '')}</td>`;
-      tb.appendChild(tr);
+          tb.appendChild(tr);
+        }
+      }
+      // reattach drag & drop handlers for new rows
+      initUnmatchedDnD();
+
+      applyFilters();
+      computeReconTotals();
     }
-  }
-  // NEW: reattach drag & drop handlers for new rows
-  initUnmatchedDnD();
-
-  applyFilters();
-  computeReconTotals();
-}
-
 
     // Matched recall
     async function recallSelected() {
       const ids = getSelectedMatchedIDs(); if (ids.length === 0) { toast('Select rows to recall'); return }
-      const r = await fetch('{{ url_for("recall_matched") }}', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }, body: JSON.stringify({ rowids: ids }) });
+      const r = await fetch('{{ url_for("recall_matched") }}', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({ rowids: ids })
+      });
       if (!r.ok) { const t = await r.text(); toast('Recall failed: ' + t); return }
       const j = await r.json(); if (j.matched) rebuildMatchedTable(j.matched || []); toast('Rows recalled')
     }
     function rebuildMatchedTable(rows) {
       const body = document.getElementById('mBody'); if (!body) return; body.innerHTML = '';
-      if (!rows || rows.length === 0) { const tr = document.createElement('tr'); tr.innerHTML = `<td colspan="10" class="note" style="padding:16px">No matched rows.</td>`; body.appendChild(tr); return }
+      if (!rows || rows.length === 0) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td colspan="10" class="note" style="padding:16px">No matched rows.</td>`;
+        body.appendChild(tr); return
+      }
       for (const r of rows) {
         const at = Number(r.AT) || 0; const br = Number(r.Broker) || 0; const diff = Number((br - at).toFixed(2));
         const tr = document.createElement('tr'); tr.dataset.rowid = r.RowID;
@@ -1681,7 +1747,8 @@ function rebuildUnmatchedTable(rows) {
     function renderHistoryTable(rows) {
       histTBody.innerHTML = '';
       if (!rows || rows.length === 0) {
-        const tr = document.createElement('tr'); tr.innerHTML = `<td colspan="10" class="note" style="padding:16px">No history found.</td>`;
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td colspan="10" class="note" style="padding:16px">No history found.</td>`;
         histTBody.appendChild(tr); return
       }
       for (const r of rows) {
@@ -1724,7 +1791,9 @@ function rebuildUnmatchedTable(rows) {
     [histFrom, histTo, histSym, histMatch, histText].forEach(el => el?.addEventListener('input', debounce(filterHistory, 150)));
     function clearHistoryFilters() { [histFrom, histTo, histSym, histMatch, histText].forEach(el => { if (el) el.value = '' }); filterHistory() }
     function toggleHistorySelectAll(box) {
-      histTBody.querySelectorAll('.hpick').forEach(cb => { const tr = cb.closest('tr'); if (tr.classList.contains('hidden')) return; cb.checked = box.checked });
+      histTBody.querySelectorAll('.hpick').forEach(cb => {
+        const tr = cb.closest('tr'); if (tr.classList.contains('hidden')) return; cb.checked = box.checked
+      });
       updateHistorySelection();
     }
     function updateHistorySelection() {
@@ -1748,13 +1817,17 @@ function rebuildUnmatchedTable(rows) {
       });
       if (rows.length === 0) { toast('Select one or more history rows'); return }
       try {
-        const r = await fetch('{{ url_for("history_recall") }}', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }, body: JSON.stringify({ rows }) });
+        const r = await fetch('{{ url_for("history_recall") }}', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify({ rows })
+        });
         const j = await r.json(); if (!r.ok || !j.ok) { toast(j.error || 'Recall failed'); return }
         rebuildUnmatchedTable(j.um || []); toast(`Recalled ${rows.length} row(s) to Recon`); closeHistoryModal();
       } catch (e) { toast('Recall failed') }
     }
 
-    // ---- Carry-Forward handlers (NEW) ----
+    // ---- Carry-Forward handlers ----
     async function saveCarry() {
       try {
         const r = await fetch('/carry/save', {
@@ -1783,7 +1856,7 @@ function rebuildUnmatchedTable(rows) {
           toast(j.error || 'Load carry-forward failed');
           return;
         }
-        rebuildUnmatchedTable(j.um || []);
+        rebuildUnmatchedTable(j.um || []); // includes initUnmatchedDnD()
         toast(`Loaded ${j.added || 0} carry-forward row(s)`);
       } catch (e) {
         toast('Load carry-forward failed');
@@ -1819,71 +1892,60 @@ function rebuildUnmatchedTable(rows) {
     // initial dock numbers
     writeDock();
 
+    // Broker mode (GTNA folder upload etc.) + goToHome
+    (function () {
+      const brSel = document.getElementById('broker');
+      const brInp = document.getElementById('broker_file');
+      const brLbl = document.getElementById('brokerFileLabel');
+      const brHelp = document.getElementById('brokerHelp');
 
-  (function () {
-    const brSel = document.getElementById('broker');
-    const brInp = document.getElementById('broker_file');
-    const brLbl = document.getElementById('brokerFileLabel');
-    const brHelp = document.getElementById('brokerHelp');
+      function setForGTNA(on) {
+        // reset first
+        brInp.removeAttribute('multiple');
+        brInp.removeAttribute('webkitdirectory');
+        brInp.removeAttribute('mozdirectory');
+        brInp.removeAttribute('directory');
+        brInp.value = '';
 
-    function setForGTNA(on) {
-      // reset first
-      brInp.removeAttribute('multiple');
-      brInp.removeAttribute('webkitdirectory');
-      brInp.removeAttribute('mozdirectory');
-      brInp.removeAttribute('directory');
-      brInp.value = '';
-
-      if (on) {
-        brInp.setAttribute('multiple', '');
-        // folder-pick (works in Chromium/Edge)
-        brInp.setAttribute('webkitdirectory', '');
-        // accept only CSV for GTNA
-        brInp.setAttribute('accept', '.csv');
-        brLbl.textContent = 'Broker Files (CSV folder or multiple .csv)';
-        brHelp.textContent = 'GTNA: select a folder or multiple CSV files. Filter uses Value Date; Rec shows Trans.Date. Buy/Sell are aggregated by Trade Date.';
-      } else {
-        brInp.setAttribute('accept', '.csv,.xlsx,.pdf');
-        brLbl.textContent = 'Broker File (.csv,.xlsx,.pdf)';
-        brHelp.textContent = '';
+        if (on) {
+          brInp.setAttribute('multiple', '');
+          // folder-pick (works in Chromium/Edge)
+          brInp.setAttribute('webkitdirectory', '');
+          // accept only CSV for GTNA
+          brInp.setAttribute('accept', '.csv');
+          brLbl.textContent = 'Broker Files (CSV folder or multiple .csv)';
+          brHelp.textContent = 'GTNA: select a folder or multiple CSV files. Filter uses Value Date; Rec shows Trans.Date. Buy/Sell are aggregated by Trade Date.';
+        } else {
+          brInp.setAttribute('accept', '.csv,.xlsx,.pdf');
+          brLbl.textContent = 'Broker File (.csv,.xlsx,.pdf)';
+          brHelp.textContent = '';
+        }
       }
-    }
 
-window.goToHome = async function () {
-  try {
-    await fetch('{{ url_for("reset_session") }}', { method: 'POST' });
-    window.location = '{{ url_for("index") }}';
-  } catch (e) {
-    window.location = '{{ url_for("index") }}';
-  }
-};
+      // global home button
+      window.goToHome = async function () {
+        try {
+          await fetch('{{ url_for("reset_session") }}', { method: 'POST' });
+          window.location = '{{ url_for("index") }}';
+        } catch (e) {
+          window.location = '{{ url_for("index") }}';
+        }
+      };
 
+      function applyBrokerMode() {
+        const v = (brSel?.value || '').toLowerCase();
+        setForGTNA(v === 'gtna');
+      }
 
-    function applyBrokerMode() {
-      const v = (brSel?.value || '').toLowerCase();
-      setForGTNA(v === 'gtna');
-    }
-
-    brSel?.addEventListener('change', applyBrokerMode);
-    // run on load to match pre-selected value
-    applyBrokerMode();
-  })();
+      brSel?.addEventListener('change', applyBrokerMode);
+      // run on load to match pre-selected value
+      applyBrokerMode();
+    })();
 
     document.addEventListener('DOMContentLoaded', () => {
-    if (umTable) initUnmatchedDnD();
-  });
-
-
+      if (umTable) initUnmatchedDnD();
+    });
   </script>
 </body>
 
-
 </html>
-
-
-
-
-
-
-
-
