@@ -1182,34 +1182,61 @@ if (umTable) {
     }
     async function addAccountCommon(v) {
       try {
+        const broker = document.getElementById('broker')?.value || '';   // 👈 broker
+    
         const r = await fetch('{{ url_for("accounts_add") }}', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-          body: JSON.stringify({ account: v })
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          body: JSON.stringify({
+            account: v,
+            broker: broker                       // 👈 send broker to backend
+          })
         });
-        const j = await r.json(); if (!r.ok || !j.ok) { toast(j.error || 'Add failed'); return }
-        const opts = (j.accounts || []).map(a => `<option value="${a}" ${a === j.selected ? 'selected' : ''}>${a}</option>`).join('');
+    
+        const j = await r.json();
+        if (!r.ok || !j.ok) {
+          toast(j.error || 'Add failed');
+          return;
+        }
+    
+        const opts = (j.accounts || [])
+          .map(a => `<option value="${a}" ${a === j.selected ? 'selected' : ''}>${a}</option>`)
+          .join('');
+    
         if (accSel1) accSel1.innerHTML = `<option value="">-- Select account --</option>${opts}`;
         if (accSel2) accSel2.innerHTML = `<option value="">-- Select account --</option>${opts}`;
-        setAccountValue(j.selected || v); toast('Account added')
-      } catch (e) { toast('Add account failed') }
+    
+        setAccountValue(j.selected || v);
+        toast('Account added');
+      } catch (e) {
+        toast('Add account failed');
+      }
     }
-    async function deleteAccount() {
-      const acc = (accSel1?.value || accSel2?.value || '').trim(); if (!acc) { toast('Choose an account'); return }
-      if (!confirm(`Delete account "${acc}"? This removes its saved data folder.`)) return;
-      try {
-        const r = await fetch('{{ url_for("accounts_delete") }}', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-          body: JSON.stringify({ account: acc })
-        });
-        const j = await r.json(); if (!r.ok || !j.ok) { toast(j.error || 'Delete failed'); return }
-        const opts = (j.accounts || []).map(a => `<option value="${a}" ${a === j.selected ? 'selected' : ''}>${a}</option>`).join('');
-        if (accSel1) accSel1.innerHTML = `<option value="">-- Select account --</option>${opts}`;
-        if (accSel2) accSel2.innerHTML = `<option value="">-- Select account --</option>${opts}`;
-        setAccountValue(j.selected || ''); toast('Account deleted');
-      } catch (e) { toast('Delete account failed') }
-    }
+
+      async function deleteAccount() {
+        const acc = (accSel1?.value || accSel2?.value || '').trim();
+        if (!acc) { toast('Choose an account'); return }
+      
+        if (!confirm(`Delete account "${acc}"? This removes its saved data folder.`)) return;
+      
+        const broker = document.getElementById('broker')?.value || '';    // 👈
+      
+        try {
+          const r = await fetch('{{ url_for("accounts_delete") }}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify({ account: acc, broker })                 // 👈
+          });
+          const j = await r.json(); if (!r.ok || !j.ok) { toast(j.error || 'Delete failed'); return }
+          const opts = (j.accounts || []).map(a => `<option value="${a}" ${a === j.selected ? 'selected' : ''}>${a}</option>`).join('');
+          if (accSel1) accSel1.innerHTML = `<option value="">-- Select account --</option>${opts}`;
+          if (accSel2) accSel2.innerHTML = `<option value="">-- Select account --</option>${opts}`;
+          setAccountValue(j.selected || ''); toast('Account deleted');
+        } catch (e) { toast('Delete account failed') }
+      }
 
     // ---------- Meta save ----------
     const rdateEl = document.getElementById('rdate');
@@ -1982,5 +2009,6 @@ if (umTable) {
 </body>
 
 </html>
+
 
 
