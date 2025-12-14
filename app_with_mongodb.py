@@ -225,6 +225,21 @@ def _accounts_save(lst: list[str]):
                    key=str), ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
+ACCOUNTS_BY_BROKER_JSON = DATA_ROOT / "accounts_by_broker.json"
+
+def _accounts_by_broker_load() -> dict:
+    if not ACCOUNTS_BY_BROKER_JSON.exists():
+        return {}
+    try:
+        return json.loads(ACCOUNTS_BY_BROKER_JSON.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+def _accounts_by_broker_save(mapping: dict):
+    ACCOUNTS_BY_BROKER_JSON.write_text(
+        json.dumps(mapping, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
 
 
 def _account_dir(account: str) -> Path:
@@ -1756,7 +1771,25 @@ def save_meta():
 
 @app.route("/accounts/list", methods=["GET"])
 def accounts_list():
-    return _json_ok({"accounts": _accounts_load()})
+    broker_name = (request.args.get("broker") or "").strip()
+    all_accounts = _accounts_load()
+
+    # No broker passed → old behaviour, show all accounts
+    if not broker_name:
+        return _json_ok({"accounts": all_accounts})
+
+    # Normalize broker
+    broker_key = _pick_broker_key(broker_name)
+
+    # Load mapping { broker_key: [acc1, acc2, ...] }
+    mapping = _accounts_by_broker_load()
+    by_broker = mapping.get(broker_key, [])
+
+    # Safety: keep only accounts that still exist globally
+    filtered = [a for a in by_broker if a in all_accounts]
+
+    return _json_ok({"accounts": filtered})
+
 
 
 @app.route("/accounts/add", methods=["POST"])
@@ -1764,19 +1797,35 @@ def accounts_add():
     try:
         body = request.get_json(silent=True) or {}
         acc = (body.get("account") or "").strip()
+        broker_name = (body.get("broker") or "").strip()
+
         if not acc:
             return _json_err("Account cannot be empty", 400)
+
+        # Normal global list (same as before)
         accounts = _accounts_load()
         if acc not in accounts:
             accounts.append(acc)
             _accounts_save(accounts)
+
+        # NEW: link account to broker
+        if broker_name:
+            broker_key = _pick_broker_key(broker_name)
+            mapping = _accounts_by_broker_load()
+            current = set(mapping.get(broker_key, []))
+            current.add(acc)
+            mapping[broker_key] = sorted(current)
+            _accounts_by_broker_save(mapping)
+
         st = _load_state()
         st["account"] = acc
         _save_state(**st)
+
         return _json_ok({"ok": True, "accounts": _accounts_load(), "selected": acc})
     except Exception as e:
         traceback.print_exc()
         return _json_err(f"Accounts add error: {e}", 500)
+
 
 
 @app.route("/accounts/delete", methods=["POST"])
