@@ -1316,17 +1316,18 @@ def view_rec():
         ].copy()
         df["RowID"] = range(1, len(df) + 1)
 
-        # Save as the active session rec
-        _save_df(df, "rec.pkl")
-
-        # Update state so /recon knows which account/broker we're on
+        # ✅ First update state so _save_df writes under the correct account+broker combo
         _save_state(account=account, broker=broker_key)
+
+        # Then save as the active session rec
+        _save_df(df, "rec.pkl")
 
         # Frontend will redirect to /recon after success
         return jsonify(ok=True)
     except Exception as e:
         traceback.print_exc()
         return jsonify(ok=False, error=f"Error loading existing reconciliation: {e}"), 500
+
 
 
 
@@ -1528,6 +1529,7 @@ def view_matched():
         recon_date=st.get("recon_date", ""),
         tol=st.get("tol", 0.01),
         accounts=accounts,
+        broker=st.get("broker", "Velocity"),  # ✅ keep broker dropdown in sync
     )
 
 
@@ -1554,8 +1556,10 @@ def recon():
         eb_brk=st.get("eb_brk"),
         account=st.get("account", ""),
         recon_date=st.get("recon_date", ""),
-        accounts=_accounts_load(),
+        accounts=accounts,
+        broker=st.get("broker", "Velocity"),  # ✅ keeps selected broker on screen
     )
+
 
 
 @app.route("/manual_pair", methods=["POST"])
