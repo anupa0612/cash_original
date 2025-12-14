@@ -1879,60 +1879,108 @@ if (umTable) {
     writeDock();
 
     // Broker mode (GTNA folder upload etc.) + goToHome
-    (function () {
-      const brSel = document.getElementById('broker');
-      const brInp = document.getElementById('broker_file');
-      const brLbl = document.getElementById('brokerFileLabel');
-      const brHelp = document.getElementById('brokerHelp');
+    // Broker mode (GTNA folder upload etc.) + goToHome
+(function () {
+  const brSel = document.getElementById('broker');
+  const brInp = document.getElementById('broker_file');
+  const brLbl = document.getElementById('brokerFileLabel');
+  const brHelp = document.getElementById('brokerHelp');
 
-      function setForGTNA(on) {
-        // reset first
-        brInp.removeAttribute('multiple');
-        brInp.removeAttribute('webkitdirectory');
-        brInp.removeAttribute('mozdirectory');
-        brInp.removeAttribute('directory');
-        brInp.value = '';
+  function setForGTNA(on) {
+    // reset first
+    brInp.removeAttribute('multiple');
+    brInp.removeAttribute('webkitdirectory');
+    brInp.removeAttribute('mozdirectory');
+    brInp.removeAttribute('directory');
+    brInp.value = '';
 
-        if (on) {
-          brInp.setAttribute('multiple', '');
-          // folder-pick (works in Chromium/Edge)
-          brInp.setAttribute('webkitdirectory', '');
-          // accept only CSV for GTNA
-          brInp.setAttribute('accept', '.csv');
-          brLbl.textContent = 'Broker Files (CSV folder or multiple .csv)';
-          brHelp.textContent = 'GTNA: select a folder or multiple CSV files. Filter uses Value Date; Rec shows Trans.Date. Buy/Sell are aggregated by Trade Date.';
-        } else {
-          brInp.setAttribute('accept', '.csv,.xlsx,.pdf');
-          brLbl.textContent = 'Broker File (.csv,.xlsx,.pdf)';
-          brHelp.textContent = '';
-        }
-      }
+    if (on) {
+      brInp.setAttribute('multiple', '');
+      brInp.setAttribute('webkitdirectory', '');
+      brInp.setAttribute('accept', '.csv');
+      brLbl.textContent = 'Broker Files (CSV folder or multiple .csv)';
+      brHelp.textContent =
+        'GTNA: select a folder or multiple CSV files. Filter uses Value Date; Rec shows Trans.Date. Buy/Sell are aggregated by Trade Date.';
+    } else {
+      brInp.setAttribute('accept', '.csv,.xlsx,.pdf');
+      brLbl.textContent = 'Broker File (.csv,.xlsx,.pdf)';
+      brHelp.textContent = '';
+    }
+  }
 
-      // global home button
-      window.goToHome = async function () {
-        try {
-          await fetch('{{ url_for("reset_session") }}', { method: 'POST' });
-          window.location = '{{ url_for("index") }}';
-        } catch (e) {
-          window.location = '{{ url_for("index") }}';
-        }
-      };
+  // global home button
+  window.goToHome = async function () {
+    try {
+      await fetch('{{ url_for("reset_session") }}', { method: 'POST' });
+      window.location = '{{ url_for("index") }}';
+    } catch (e) {
+      window.location = '{{ url_for("index") }}';
+    }
+  };
 
-      function applyBrokerMode() {
-        const v = (brSel?.value || '').toLowerCase();
-        setForGTNA(v === 'gtna');
-      }
+  function applyBrokerMode() {
+    const v = (brSel?.value || '').toLowerCase();
+    setForGTNA(v === 'gtna');
+  }
 
-      brSel?.addEventListener('change', applyBrokerMode);
-      // run on load to match pre-selected value
-      applyBrokerMode();
-    })();
+  // Load accounts list for a given broker into accSelect / accSelect2
+  async function refreshAccountsForBroker(brokerName) {
+    const acc1 = document.getElementById('accSelect');
+    const acc2 = document.getElementById('accSelect2');
+    if (!acc1 && !acc2) return;
 
-    document.addEventListener('DOMContentLoaded', () => {
-      if (umTable) initUnmatchedDnD();
+    const qs = brokerName ? '?broker=' + encodeURIComponent(brokerName) : '';
+    const resp = await fetch('/accounts/list' + qs, {
+      headers: { 'Accept': 'application/json' }
     });
+    if (!resp.ok) return;
+
+    const data = await resp.json();
+    const accounts = (data && data.accounts) || [];
+
+    function populate(select) {
+      if (!select) return;
+
+      // Clear current options
+      select.innerHTML = '';
+
+      // Placeholder
+      const ph = document.createElement('option');
+      ph.value = '';
+      ph.textContent = accounts.length ? '-- Select account --' : 'No accounts for this broker';
+      select.appendChild(ph);
+
+      // Add accounts
+      accounts.forEach(acc => {
+        const opt = document.createElement('option');
+        opt.value = acc;
+        opt.textContent = acc;
+        select.appendChild(opt);
+      });
+    }
+
+    populate(acc1);
+    populate(acc2);
+  }
+
+  // When page is ready, apply broker mode and load accounts
+  document.addEventListener('DOMContentLoaded', function () {
+    applyBrokerMode();
+
+    if (brSel) {
+      refreshAccountsForBroker(brSel.value);
+
+      brSel.addEventListener('change', function () {
+        applyBrokerMode();
+        refreshAccountsForBroker(this.value);
+      });
+    }
+  });
+})();
+
   </script>
 </body>
 
 </html>
+
 
