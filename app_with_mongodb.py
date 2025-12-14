@@ -1352,8 +1352,7 @@ def build_rec_route():
         at_df = clean_at(at_file)
 
         # NEW: Clean broker file(s) by selected broker
-        account = (request.form.get("account")
-                   or request.json.get("account") or "").strip()
+        account = (request.form.get("account") or "").strip()
 
         if broker_key in {"gtna", "gtn a", "gtn", "gtn asia"}:
             parts = []
