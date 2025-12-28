@@ -11,7 +11,7 @@ import pickle
 import bson
 
 class MongoDBHandler:
-    def __init__(self, connection_string="mongodb://localhost:27017/", db_name="cash_recon_db"):
+    def __init__(self, connection_string="mongodb://localhost:27017/", db_name="test_anp"):
         """
         Initialize MongoDB connection
         
@@ -31,17 +31,24 @@ class MongoDBHandler:
         try:
             self.client = MongoClient(
                 self.connection_string,
-                serverSelectionTimeoutMS=5000  # 5 second timeout
+                serverSelectionTimeoutMS=8000,   # 8 sec timeout
+                connectTimeoutMS=8000,
+                socketTimeoutMS=8000,
+                directConnection=True,           # ✅ important for many internal single-node Mongo servers
             )
+    
             # Test connection
-            self.client.admin.command('ping')
+            self.client.admin.command("ping")
+    
             self.db = self.client[self.db_name]
             self.connected = True
             print(f"✓ MongoDB connected successfully to database: {self.db_name}")
-        except (ConnectionFailure, ServerSelectionTimeoutError) as e:
-            self.connected = False
-            print(f"✗ MongoDB connection failed: {str(e)}")
-            print("  Application will use file-based storage as fallback")
+
+    except (ConnectionFailure, ServerSelectionTimeoutError) as e:
+        self.connected = False
+        print(f"✗ MongoDB connection failed: {str(e)}")
+        print("  Application will use file-based storage as fallback")
+
     
     def is_connected(self):
         """Check if MongoDB is connected"""
