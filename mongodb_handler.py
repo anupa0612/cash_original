@@ -34,7 +34,7 @@ class MongoDBHandler:
                 serverSelectionTimeoutMS=8000,   # 8 sec timeout
                 connectTimeoutMS=8000,
                 socketTimeoutMS=8000,
-                directConnection=True,           # ✅ important for many internal single-node Mongo servers
+                directConnection=True,           # important for many internal single-node Mongo servers
             )
     
             # Test connection
@@ -43,11 +43,17 @@ class MongoDBHandler:
             self.db = self.client[self.db_name]
             self.connected = True
             print(f"✓ MongoDB connected successfully to database: {self.db_name}")
+    
+        except (ConnectionFailure, ServerSelectionTimeoutError) as e:
+            self.connected = False
+            print(f"✗ MongoDB connection failed: {str(e)}")
+            print("  Application will use file-based storage as fallback")
+    
+        except Exception as e:
+            self.connected = False
+            print(f"✗ MongoDB unexpected error: {str(e)}")
+            print("  Application will use file-based storage as fallback")
 
-    except (ConnectionFailure, ServerSelectionTimeoutError) as e:
-        self.connected = False
-        print(f"✗ MongoDB connection failed: {str(e)}")
-        print("  Application will use file-based storage as fallback")
 
     
     def is_connected(self):
