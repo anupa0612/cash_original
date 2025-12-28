@@ -84,10 +84,10 @@ URL = f"http://{HOST}:{PORT}/"
 # Initialize MongoDB handler
 # MongoDB Atlas connection string
 MONGODB_URI = os.environ.get(
-    "MONGODB_URI", 
-    "mongodb+srv://admin:Admin123456@cluster0.z8yhqsg.mongodb.net/cash_recon?retryWrites=true&w=majority&appName=Cluster0"
+    "MONGODB_URI",
+    "mongodb://test_anp:password@172.20.224.99:27017/?authSource=test_anp"
 )
-MONGODB_DB_NAME = os.environ.get("MONGODB_DB_NAME", "cash_recon")
+MONGODB_DB_NAME = os.environ.get("MONGODB_DB_NAME", "test_anp")
 
 mongo_handler = MongoDBHandler(MONGODB_URI, MONGODB_DB_NAME)
 
