@@ -1,0 +1,31 @@
+version: "3.9"
+
+services:
+  web:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: "8080"
+      SECRET_KEY: "local-dev-secret-change-me"
+      # Point at the local mongo service below for testing
+      MONGODB_URI: "mongodb://mongo:27017/"
+      MONGODB_DB_NAME: "test_anp"
+      # Simulate Back4App environment so /tmp paths are used
+      BACK4APP_APP_ID: "local-test"
+    depends_on:
+      - mongo
+    volumes:
+      # Mount templates & static so you can iterate without rebuilding
+      - ./templates:/app/templates:ro
+      - ./static:/app/static:ro
+
+  mongo:
+    image: mongo:7
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+volumes:
+  mongo_data:

@@ -57,11 +57,26 @@ def _base_path() -> str:
 TEMPLATES_DIR = os.path.join(_base_path(), "templates")
 STATIC_DIR = os.path.join(_base_path(), "static")
 
-# Use a stable, user-writable location for app data (works for EXE too)
-_APPDATA = os.environ.get("LOCALAPPDATA") or os.path.join(
-    str(Path.home()), ".cash_recon_pro")
-APP_DIR = Path(_APPDATA) / "CashReconPro"
-TMP_ROOT = APP_DIR / "sessions"
+# ── Detect container / PaaS environment ────────────────────────────────────
+_IS_CONTAINER = bool(
+    os.environ.get("BACK4APP_APP_ID")        # Back4App Containers
+    or os.environ.get("RAILWAY_ENVIRONMENT") # Railway
+    or os.environ.get("RENDER")              # Render
+    or os.environ.get("DYNO")               # Heroku
+    or os.environ.get("FLY_APP_NAME")       # Fly.io
+    or os.environ.get("K_SERVICE")          # Cloud Run
+)
+
+# In containers use /tmp (ephemeral but always writable); locally use home dir.
+if _IS_CONTAINER:
+    _APP_ROOT = Path("/tmp/cash_recon_pro")
+else:
+    _APPDATA = os.environ.get("LOCALAPPDATA") or os.path.join(
+        str(Path.home()), ".cash_recon_pro")
+    _APP_ROOT = Path(_APPDATA) / "CashReconPro"
+
+APP_DIR   = _APP_ROOT
+TMP_ROOT  = APP_DIR / "sessions"
 DATA_ROOT = APP_DIR / "data"
 for d in (APP_DIR, TMP_ROOT, DATA_ROOT):
     d.mkdir(parents=True, exist_ok=True)
@@ -72,7 +87,7 @@ ACCOUNTS_JSON = DATA_ROOT / "accounts.json"
 # Flask app
 # --------------------------------------------------------------------------------------
 app = Flask(__name__, template_folder=TEMPLATES_DIR, static_folder=STATIC_DIR)
-app.secret_key = "change-this-secret"
+app.secret_key = os.environ.get("SECRET_KEY", "change-this-in-production")
 
 HOST = "0.0.0.0"  # Listen on all interfaces for Railway
 PORT = int(os.environ.get("PORT", 8080))  # Use Railway's PORT or default to 8080
@@ -2672,7 +2687,7 @@ if __name__ == "__main__":
     multiprocessing.freeze_support()
     
     # Only open browser if running locally (not in production/Railway)
-    is_production = os.environ.get("RAILWAY_ENVIRONMENT") or os.environ.get("RENDER") or os.environ.get("DYNO")
+    is_production = _IS_CONTAINER
     if not is_production:
         threading.Thread(target=_open_browser_when_ready, daemon=True).start()
     

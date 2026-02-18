@@ -1,12 +1,18 @@
-Flask
-pandas
-numpy
-openpyxl
-XlsxWriter
-xlrd
-pdfplumber
-pdfminer.six
-Pillow
-pyinstaller
-pymongo
-gunicorn
+# Web framework
+Flask>=3.0,<4.0
+gunicorn>=21.2
+
+# Data processing
+pandas>=2.2
+numpy>=1.26
+openpyxl>=3.1
+xlsxwriter>=3.2
+
+# MongoDB
+pymongo>=4.7
+
+# Broker parsers
+pdfplumber>=0.11       # Riyadh Capital PDF parsing
+
+# Utilities
+python-dateutil>=2.9

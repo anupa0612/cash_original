@@ -29,12 +29,18 @@ class MongoDBHandler:
     def _connect(self):
         """Establish MongoDB connection"""
         try:
+            # directConnection=True only works for single-node localhost setups.
+            # Fly.io / Atlas use replica sets, so auto-detect based on the URI.
+            _is_localhost = (
+                "localhost" in self.connection_string
+                or "127.0.0.1" in self.connection_string
+            )
             self.client = MongoClient(
                 self.connection_string,
-                serverSelectionTimeoutMS=8000,   # 8 sec timeout
+                serverSelectionTimeoutMS=8000,
                 connectTimeoutMS=8000,
                 socketTimeoutMS=8000,
-                directConnection=True,           # important for many internal single-node Mongo servers
+                directConnection=_is_localhost,
             )
     
             # Test connection
