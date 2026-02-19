@@ -1,0 +1,49 @@
+# fly.toml — Cash Reconciliation App
+# Generated for Fly.io deployment
+# Docs: https://fly.io/docs/reference/configuration/
+
+app = "cash-recon-pro"       # ← change to your actual fly app name after `fly launch`
+primary_region = "iad"       # US East; change to e.g. "lhr" (London), "sin" (Singapore), etc.
+
+[build]
+  # Uses your existing multi-stage Dockerfile — no changes needed there.
+
+# ── HTTP service ────────────────────────────────────────────────────────────
+[http_service]
+  internal_port       = 8080
+  force_https         = true
+  auto_stop_machines  = true    # spin down when idle (saves cost on free tier)
+  auto_start_machines = true    # spin back up on first request
+  min_machines_running = 0      # set to 1 if you need zero cold-start latency
+
+  [http_service.concurrency]
+    type       = "requests"
+    soft_limit = 25
+    hard_limit = 50
+
+# ── Health check (matches your existing /health route) ──────────────────────
+[[http_service.checks]]
+  interval   = "15s"
+  timeout    = "10s"
+  grace_period = "30s"   # give gunicorn + MongoDB time to connect on cold start
+  method     = "GET"
+  path       = "/health"
+
+# ── Machine sizing ───────────────────────────────────────────────────────────
+[[vm]]
+  memory = "512mb"   # bump to "1gb" if you process large Excel/PDF files
+  cpus   = 1
+
+# ── Environment variables (non-secret) ──────────────────────────────────────
+[env]
+  PORT            = "8080"
+  PYTHONUNBUFFERED = "1"
+  PYTHONDONTWRITEBYTECODE = "1"
+  # FLY_APP_NAME is set automatically by Fly — your app already detects it.
+
+# ── Secrets (set via CLI — never commit real values here) ───────────────────
+# Run these once after `fly launch`:
+#
+#   fly secrets set SECRET_KEY="$(openssl rand -hex 32)"
+#   fly secrets set MONGODB_URI="mongodb+srv://user:pass@cluster.mongodb.net/"
+#   fly secrets set MONGODB_DB_NAME="cash_recon_prod"
