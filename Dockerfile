@@ -34,23 +34,31 @@ COPY . .
 # Ensure the brokers package is importable
 RUN test -f brokers/__init__.py || touch brokers/__init__.py
 
-# Create a writable temp directory for session pickles
-RUN mkdir -p /tmp/cash_recon_sessions /tmp/cash_recon_data \
-    && chmod 777 /tmp/cash_recon_sessions /tmp/cash_recon_data
+# Create writable temp directories for session pickles / fallback files
+RUN mkdir -p /tmp/cash_recon_pro/sessions /tmp/cash_recon_pro/data \
+    && chmod 777 /tmp/cash_recon_pro /tmp/cash_recon_pro/sessions /tmp/cash_recon_pro/data
 
-# Back4App / most PaaS providers set PORT at runtime
+# Fly.io / Back4App / most PaaS providers set PORT at runtime
 ENV PORT=8080 \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 
 EXPOSE 8080
 
-# Use gunicorn in production; worker count tuned for low-memory containers
+# Declare the health-check endpoint so the container orchestrator knows
+# when the app is ready.  Fly.io also uses the [http_service.checks] in
+# fly.toml, but having it here too means it works everywhere.
+HEALTHCHECK --interval=15s --timeout=10s --start-period=30s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:${PORT}/health')" || exit 1
+
+# Use gunicorn in production; worker count tuned for low-memory containers.
+# Bump --workers to 4 for higher concurrency (requires >= 1 GB RAM).
 CMD ["sh", "-c", \
      "gunicorn app_with_mongodb:app \
         --bind 0.0.0.0:${PORT} \
         --workers 2 \
         --threads 4 \
         --timeout 120 \
+        --keep-alive 5 \
         --access-logfile - \
         --error-logfile -"]

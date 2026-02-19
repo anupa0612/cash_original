@@ -7,16 +7,18 @@ services:
       - "8080:8080"
     environment:
       PORT: "8080"
+      # FIX: use a placeholder — override via a .env file or shell export.
+      # Never commit real SECRET_KEY or MONGODB_URI values here.
       SECRET_KEY: "local-dev-secret-change-me"
-      # Point at the local mongo service below for testing
       MONGODB_URI: "mongodb://mongo:27017/"
       MONGODB_DB_NAME: "test_anp"
-      # Simulate Back4App environment so /tmp paths are used
+      # Simulate container environment so /tmp paths are used
       BACK4APP_APP_ID: "local-test"
     depends_on:
-      - mongo
+      mongo:
+        condition: service_healthy   # wait until mongo is actually ready
     volumes:
-      # Mount templates & static so you can iterate without rebuilding
+      # Mount templates & static for hot-reload during development
       - ./templates:/app/templates:ro
       - ./static:/app/static:ro
 
@@ -26,6 +28,12 @@ services:
       - "27017:27017"
     volumes:
       - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
 volumes:
   mongo_data:

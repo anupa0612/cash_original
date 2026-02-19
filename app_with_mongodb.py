@@ -20,13 +20,11 @@ import numpy as np
 # MongoDB integration
 from mongodb_handler import MongoDBHandler
 
-
-# ADD: Clear Street module (brokers/clearstreet.py)
+# Broker modules
 from brokers import clearstreet as broker_clearstreet
-from brokers import scb  # new
+from brokers import scb
 from brokers import riyadhcapital as broker_riyadhcapital
 from brokers import gtna as broker_gtna
-
 
 import pandas as pd
 from flask import (
@@ -43,14 +41,15 @@ from flask import (
 # --------------------------------------------------------------------------------------
 # Paths (PyInstaller-friendly + user-writable data directories)
 # --------------------------------------------------------------------------------------
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))   # folder of this file
-DATA_DIR = os.path.join(BASE_DIR, "data")               # ./data under project
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.join(BASE_DIR, "data")
 os.makedirs(DATA_DIR, exist_ok=True)
+
 
 def _base_path() -> str:
     """Where templates/static live (sys._MEIPASS inside onefile EXE)."""
     if hasattr(sys, "_MEIPASS"):
-        return sys._MEIPASS  # PyInstaller extraction dir (read-only)
+        return sys._MEIPASS
     return os.path.dirname(os.path.abspath(__file__))
 
 
@@ -63,7 +62,7 @@ _IS_CONTAINER = bool(
     or os.environ.get("RAILWAY_ENVIRONMENT") # Railway
     or os.environ.get("RENDER")              # Render
     or os.environ.get("DYNO")               # Heroku
-    or os.environ.get("FLY_APP_NAME")       # Fly.io
+    or os.environ.get("FLY_APP_NAME")       # Fly.io  ← detected here
     or os.environ.get("K_SERVICE")          # Cloud Run
 )
 
@@ -89,22 +88,20 @@ ACCOUNTS_JSON = DATA_ROOT / "accounts.json"
 app = Flask(__name__, template_folder=TEMPLATES_DIR, static_folder=STATIC_DIR)
 app.secret_key = os.environ.get("SECRET_KEY", "change-this-in-production")
 
-HOST = "0.0.0.0"  # Listen on all interfaces for Railway
-PORT = int(os.environ.get("PORT", 8080))  # Use Railway's PORT or default to 8080
+HOST = "0.0.0.0"
+PORT = int(os.environ.get("PORT", 8080))
 URL = f"http://{HOST}:{PORT}/"
 
 # --------------------------------------------------------------------------------------
 # MongoDB Configuration
 # --------------------------------------------------------------------------------------
-# Initialize MongoDB handler
-# MongoDB Atlas connection string
-MONGODB_URI = os.environ.get(
-    "MONGODB_URI",
-    "mongodb://test_anp:password@172.20.224.99:27017/?authSource=test_anp"
-)
+# FIX: removed hardcoded credentials from fallback value.
+# Always set MONGODB_URI as an environment variable / secret in production.
+MONGODB_URI = os.environ.get("MONGODB_URI", "mongodb://localhost:27017/")
 MONGODB_DB_NAME = os.environ.get("MONGODB_DB_NAME", "test_anp")
 
 mongo_handler = MongoDBHandler(MONGODB_URI, MONGODB_DB_NAME)
+
 
 def make_rec_key(account: str, broker: str) -> str:
     """
@@ -118,9 +115,10 @@ def make_rec_key(account: str, broker: str) -> str:
         return "default"
 
     if not broker:
-        return account  # if broker is empty, just use account
+        return account
 
     return f"{account}__{broker}"
+
 
 # Column constants
 COL_DATE = "Date"
@@ -135,21 +133,14 @@ def _pick_broker_key(name: str) -> str:
     k = (name or "").strip().lower()
     alias = {
         "velocity": "velocity",
-
-        # use ONE canonical key for Clear Street
         "clear street": "clearstreet",
         "clearstreet": "clearstreet",
-
-        # SCB aliases
         "scb": "scb",
         "standard chartered": "scb",
         "standard chartered bank": "scb",
-
-        # Riyadh Capital aliases
         "riyadh capital": "riyadh capital",
         "riyadhcapital": "riyadh capital",
         "rc": "riyadh capital",
-
         "gtna": "gtna",
     }
     return alias.get(k, "velocity")
@@ -158,7 +149,6 @@ def _pick_broker_key(name: str) -> str:
 def clean_broker_dispatch(file_storage, start_date_str, end_date_str, broker_name, account_value):
     key = _pick_broker_key(broker_name)
     clean_fn = BROKER_REGISTRY[key]["clean"]
-    # SCB needs account filter; others don't
     if key == "scb":
         return clean_fn(file_storage, start_date_str, end_date_str, account_value=account_value)
     try:
@@ -200,10 +190,10 @@ def _json_ok(payload: dict, code: int = 200):
 def _json_err(msg: str, code: int = 400):
     return _json_ok({"ok": False, "error": msg}, code=code)
 
+
 # --------------------------------------------------------------------------------------
 # Accounts & carry-forward helpers
 # --------------------------------------------------------------------------------------
-
 
 def _safe_account_name(acc: str) -> str:
     s = (acc or "").strip()
@@ -219,7 +209,7 @@ def _accounts_load() -> list[str]:
         accounts = mongo_handler.load_accounts_list()
         if accounts:
             return accounts
-    
+
     # Fallback to file-based storage
     if not ACCOUNTS_JSON.exists():
         return []
@@ -233,16 +223,30 @@ def _accounts_save(lst: list[str]):
     # Save to MongoDB first
     if mongo_handler.is_connected():
         mongo_handler.save_accounts_list(lst)
-    
-    # Always save to file as backup
-    ACCOUNTS_JSON.write_text(
-        json.dumps(sorted(set([x for x in lst if x]),
-                   key=str), ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+
+    # Always save to file as backup (no-op in containers where /tmp is ephemeral)
+    try:
+        ACCOUNTS_JSON.write_text(
+            json.dumps(sorted(set([x for x in lst if x]),
+                       key=str), ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+    except Exception:
+        pass
+
+
+# FIX: accounts_by_broker now persists to MongoDB (was file-only → lost on container restart)
 ACCOUNTS_BY_BROKER_JSON = DATA_ROOT / "accounts_by_broker.json"
 
+
 def _accounts_by_broker_load() -> dict:
+    # Try MongoDB first
+    if mongo_handler.is_connected():
+        mapping = mongo_handler.load_accounts_by_broker()
+        if mapping:
+            return mapping
+
+    # Fallback to local file
     if not ACCOUNTS_BY_BROKER_JSON.exists():
         return {}
     try:
@@ -250,11 +254,20 @@ def _accounts_by_broker_load() -> dict:
     except Exception:
         return {}
 
+
 def _accounts_by_broker_save(mapping: dict):
-    ACCOUNTS_BY_BROKER_JSON.write_text(
-        json.dumps(mapping, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+    # Save to MongoDB first
+    if mongo_handler.is_connected():
+        mongo_handler.save_accounts_by_broker(mapping)
+
+    # Always save to file as backup
+    try:
+        ACCOUNTS_BY_BROKER_JSON.write_text(
+            json.dumps(mapping, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+    except Exception:
+        pass
 
 
 def _account_dir(account: str) -> Path:
@@ -269,14 +282,15 @@ def _carry_path(account: str) -> Path:
 
 def _save_carry_for_account(account: str, rows_df: pd.DataFrame):
     df = rows_df.copy()
-    
-    # Save to MongoDB first
+
     if mongo_handler.is_connected():
         mongo_handler.save_carry_forward(account, df)
-    
-    # Always save to file as backup
-    with open(_carry_path(account), "wb") as f:
-        pickle.dump(df, f)
+
+    try:
+        with open(_carry_path(account), "wb") as f:
+            pickle.dump(df, f)
+    except Exception:
+        pass
 
 
 def _load_carry_for_account(account: str) -> pd.DataFrame | None:
@@ -285,7 +299,7 @@ def _load_carry_for_account(account: str) -> pd.DataFrame | None:
         df = mongo_handler.load_carry_forward(account)
         if df is not None:
             return df
-    
+
     # Fallback to file-based storage
     p = _carry_path(account)
     if not p.exists():
@@ -293,10 +307,10 @@ def _load_carry_for_account(account: str) -> pd.DataFrame | None:
     with open(p, "rb") as f:
         return pickle.load(f)
 
+
 # --------------------------------------------------------------------------------------
 # Matched history (per-account)
 # --------------------------------------------------------------------------------------
-
 
 def _history_path(account: str) -> Path:
     return _account_dir(account) / "matched_history.pkl"
@@ -313,8 +327,7 @@ def _empty_history_df() -> pd.DataFrame:
 def _history_load(account: str) -> pd.DataFrame:
     if not account:
         return _empty_history_df()
-    
-    # Try MongoDB first
+
     if mongo_handler.is_connected():
         df = mongo_handler.load_history(account)
         if df is not None and not df.empty:
@@ -322,8 +335,7 @@ def _history_load(account: str) -> pd.DataFrame:
                 if c not in df.columns:
                     df[c] = "" if c not in ("AT", "Broker") else 0.0
             return df[_HIST_COLS].copy()
-    
-    # Fallback to file-based storage
+
     p = _history_path(account)
     if not p.exists():
         return _empty_history_df()
@@ -341,14 +353,15 @@ def _history_load(account: str) -> pd.DataFrame:
 def _history_write(account: str, df: pd.DataFrame):
     if not account:
         return
-    
-    # Save to MongoDB first
+
     if mongo_handler.is_connected():
         mongo_handler.save_history(account, df[_HIST_COLS])
-    
-    # Always save to file as backup
-    with open(_history_path(account), "wb") as f:
-        pickle.dump(df[_HIST_COLS], f)
+
+    try:
+        with open(_history_path(account), "wb") as f:
+            pickle.dump(df[_HIST_COLS], f)
+    except Exception:
+        pass
 
 
 def _rows_to_history_format(rows_df: pd.DataFrame) -> pd.DataFrame:
@@ -428,15 +441,13 @@ def _sess_dir() -> Path:
 
 
 def _save_df(df: pd.DataFrame, name: str = "rec.pkl"):
-    # Get session ID
     sid = _ensure_sid()
 
-    # --- Save to MongoDB ---
     if name == "rec.pkl" and mongo_handler.is_connected():
-        # 1) Save per-browser-session copy (as you had before)
+        # 1) Save per-browser-session copy
         mongo_handler.save_session_rec(session_id=sid, df=df)
 
-        # 2) ALSO save per Account + Broker "existing rec"
+        # 2) Also save per Account + Broker "existing rec"
         try:
             st = _load_state()
             account = (st.get("account") or "").strip()
@@ -455,13 +466,15 @@ def _save_df(df: pd.DataFrame, name: str = "rec.pkl"):
                     },
                 )
         except Exception:
-            # Don't break file saving if Mongo sync fails
             traceback.print_exc()
 
-    # --- Always save to local session folder as backup ---
-    d = _sess_dir()
-    with open(d / name, "wb") as f:
-        pickle.dump(df, f)
+    # Always save to local session folder as backup
+    try:
+        d = _sess_dir()
+        with open(d / name, "wb") as f:
+            pickle.dump(df, f)
+    except Exception:
+        pass
 
 
 def _load_df(name: str = "rec.pkl") -> pd.DataFrame | None:
@@ -472,7 +485,7 @@ def _load_df(name: str = "rec.pkl") -> pd.DataFrame | None:
             df = mongo_handler.load_session_rec(sid)
             if df is not None:
                 return df
-    
+
     # Fallback to file-based storage
     p = _sess_dir() / name
     if not p.exists():
@@ -502,14 +515,17 @@ def _save_state(**kv):
 
     cur.update(kv)
 
-    with open(tmp, "wb") as f:
-        pickle.dump(cur, f, protocol=pickle.HIGHEST_PROTOCOL)
-        try:
-            f.flush()
-            os.fsync(f.fileno())
-        except Exception:
-            pass
-    os.replace(tmp, sfile)
+    try:
+        with open(tmp, "wb") as f:
+            pickle.dump(cur, f, protocol=pickle.HIGHEST_PROTOCOL)
+            try:
+                f.flush()
+                os.fsync(f.fileno())
+            except Exception:
+                pass
+        os.replace(tmp, sfile)
+    except Exception:
+        pass
 
 
 def _load_state() -> dict:
@@ -524,10 +540,10 @@ def _load_state() -> dict:
     except Exception:
         return {}
 
+
 # --------------------------------------------------------------------------------------
 # Utilities
 # --------------------------------------------------------------------------------------
-
 
 def _extract_symbol_from_desc(desc: str) -> str:
     if not isinstance(desc, str):
@@ -585,10 +601,10 @@ def rates_match(rate1: float, rate2: float) -> bool:
     r2 = float(pd.Series([rate2]).round(3).iloc[0])
     return r1 == r2
 
+
 # --------------------------------------------------------------------------------------
 # Cleaning logic
 # --------------------------------------------------------------------------------------
-
 
 def clean_at(file_storage) -> pd.DataFrame:
     def to_num(series: pd.Series) -> pd.Series:
@@ -648,12 +664,11 @@ def clean_at(file_storage) -> pd.DataFrame:
         first_ob = ob_mask[ob_mask].index[0]
         raw = raw.loc[first_ob + 1:].copy()
 
-    # AT is dd/mm/yyyy → dayfirst=True
     raw["Date"] = pd.to_datetime(
         raw["Trans. Date"], errors="coerce", dayfirst=True)
     debit = to_num(raw["Debit"]).abs()
     credit = to_num(raw["Credit"]).abs()
-    amount = credit - debit  # Debit negative, Credit positive
+    amount = credit - debit
 
     out = pd.DataFrame()
     out[COL_DATE] = raw["Date"]
@@ -711,7 +726,7 @@ def clean_broker(file_storage, start_date_str: str, end_date_str: str) -> pd.Dat
             "Type": df["trd_type"],
             "Symbol": df["symbol"],
             "Desc": df["dispdescr"],
-            "Amount": -amt,  # flip sign to align with AT
+            "Amount": -amt,
         }
     )
 
@@ -737,14 +752,13 @@ def build_rec(at_df: pd.DataFrame, broker_df: pd.DataFrame) -> pd.DataFrame:
 
     exch_rows = []
 
-    # --- Equity EXCH by TRADE DATE ---
     stock = broker_df.loc[broker_df["Type"].isin(TRADE_STOCK)]
     if not stock.empty:
         sgrp = stock.groupby(stock["ReportDate"].dt.strftime(
             "%Y-%m-%d"))["Amount"].sum()
         for trade_date, amt in sgrp.items():
             exch_rows.append({
-                COL_DATE: pd.to_datetime(trade_date),   # Trade Date
+                COL_DATE: pd.to_datetime(trade_date),
                 COL_SYMBOL: "",
                 COL_DESC: "Exchange Settlements - Equity",
                 COL_AT: 0.0,
@@ -752,14 +766,13 @@ def build_rec(at_df: pd.DataFrame, broker_df: pd.DataFrame) -> pd.DataFrame:
                 "Comments": "",
             })
 
-    # --- Options EXCH by TRADE DATE ---
     opt = broker_df.loc[broker_df["Type"].isin(TRADE_OPT)]
     if not opt.empty:
         ogrp = opt.groupby(opt["ReportDate"].dt.strftime(
             "%Y-%m-%d"))["Amount"].sum()
         for trade_date, amt in ogrp.items():
             exch_rows.append({
-                COL_DATE: pd.to_datetime(trade_date),   # Trade Date
+                COL_DATE: pd.to_datetime(trade_date),
                 COL_SYMBOL: "",
                 COL_DESC: "Exchange Settlements - Options",
                 COL_AT: 0.0,
@@ -771,16 +784,13 @@ def build_rec(at_df: pd.DataFrame, broker_df: pd.DataFrame) -> pd.DataFrame:
     if exch_rows:
         rec_parts.append(pd.DataFrame(exch_rows))
 
-    # Keep AT rows as-is
     if not at_df.empty:
         rec_parts.append(
             at_df[[COL_DATE, COL_SYMBOL, COL_DESC, COL_AT, COL_BRK, "Comments"]])
 
-    # --- Non-trade broker rows should ALSO use Trade Date in the rec ---
     non_trade = broker_df.loc[~broker_df["Type"].isin(TRADE_STOCK | TRADE_OPT)]
     if not non_trade.empty:
         nt = pd.DataFrame()
-        # <-- Trade Date here (key change)
         nt[COL_DATE] = non_trade["ReportDate"]
         nt[COL_SYMBOL] = non_trade["Symbol"].fillna("").astype(str)
         nt[COL_DESC] = non_trade["Desc"]
@@ -801,9 +811,8 @@ def build_rec(at_df: pd.DataFrame, broker_df: pd.DataFrame) -> pd.DataFrame:
     return rec
 
 
-# ---------- Broker registry + dispatch ----------
+# ---------- Broker registry ----------
 BROKER_REGISTRY = {
-    # keep all keys LOWERCASE to match _pick_broker_key
     "velocity": {
         "clean": lambda f, s, e: clean_broker(f, s, e),
         "build": lambda at, br: build_rec(at, br),
@@ -827,8 +836,9 @@ BROKER_REGISTRY = {
     "gtna": {
         "clean": broker_gtna.clean_broker,
         "build": broker_gtna.build_rec,
-    }
+    },
 }
+
 
 # --------------------------------------------------------------------------------------
 # Auto-matching
@@ -850,7 +860,7 @@ def parse_rate(desc: str) -> float:
     m = (_rate_cash_div.search(desc) or
          _rate_div_per.search(desc) or
          _rate_paren_per_sh.search(desc) or
-         _rate_kv_rate.search(desc) or  # NEW
+         _rate_kv_rate.search(desc) or
          _rate_fee_paren.search(desc) or
          _rate_pct_at.search(desc) or
          _rate_at_pshare.search(desc))
@@ -861,15 +871,17 @@ def parse_rate(desc: str) -> float:
 
 def guess_type(desc: str) -> str:
     s = (desc or "").upper()
-    if ("DVP" in s) or ("RVP" in s):          # <-- add
-        return "EXCHANGE"                     # <-- add
+    if ("DVP" in s) or ("RVP" in s):
+        return "EXCHANGE"
     if "EXCHANGE" in s and "SETTLEMENT" in s:
         return "EXCHANGE"
     if "ADR FEE" in s or "(FEE @" in s:
         return "ADR_FEE"
-    if ("WITHHOLD" in s) or ("DIVNRA" in s) or ("DIVFT" in s) or ("CASH DIVIDEND TAX" in s) or ("NRA WITHHOLD" in s):
+    if (("WITHHOLD" in s) or ("DIVNRA" in s) or ("DIVFT" in s)
+            or ("CASH DIVIDEND TAX" in s) or ("NRA WITHHOLD" in s)):
         return "WITHHOLDING"
-    if ("CASH DIVIDEND" in s) or (" DIV:" in s) or ("/SH" in s and "DIV" in s) or ("FINAL - CASH DIVIDEND" in s):
+    if (("CASH DIVIDEND" in s) or (" DIV:" in s)
+            or ("/SH" in s and "DIV" in s) or ("FINAL - CASH DIVIDEND" in s)):
         return "GROSS_DIV"
     if "RIGHTS DISTRIBUTION" in s:
         return "CORP_ACTION"
@@ -879,8 +891,8 @@ def guess_type(desc: str) -> str:
 def _build_key(desc: str, symbol: str) -> str:
     sdesc = (desc or "").lower()
     sym = (symbol or "").strip().upper()
-    if (("exchange" in sdesc and "settlement" in sdesc) or
-            ("dvp" in sdesc) or ("rvp" in sdesc)):         # <-- add
+    if (("exchange" in sdesc and "settlement" in sdesc)
+            or ("dvp" in sdesc) or ("rvp" in sdesc)):
         if "option" in sdesc:
             return "EXCH_OPT"
         if "equity" in sdesc:
@@ -1045,7 +1057,6 @@ def auto_match_no_date(df: pd.DataFrame, tol: float = 0.01) -> pd.DataFrame:
     out["_Rate3"] = out["Rate"].apply(
         lambda r: float(pd.Series([r]).round(3).iloc[0]))
 
-    # existing passes ...
     if out["Type"].isin(["GROSS_DIV", "WITHHOLDING"]).any():
         out = _pair_by_diff_two_row(out, ["Symbol", "Type", "_Rate3"], tol)
         out = _pair_by_diff_one_to_many(
@@ -1059,16 +1070,13 @@ def auto_match_no_date(df: pd.DataFrame, tol: float = 0.01) -> pd.DataFrame:
         out = _pair_by_diff_two_row(out, ["_Key"], tol)
         out = _pair_by_diff_one_to_many(out, ["_Key"], tol, max_n=18)
 
-    # NEW: DVP/RVP by date (and symbol, if present)
     if out["Type"].eq("DVP_RVP").any():
-        # try symbol+date first (rare but safe), then just date
         out = _pair_by_diff_two_row(out, ["Symbol", "DateKey"], tol)
         out = _pair_by_diff_one_to_many(
             out, ["Symbol", "DateKey"], tol, max_n=18)
         out = _pair_by_diff_two_row(out, ["DateKey"], tol)
         out = _pair_by_diff_one_to_many(out, ["DateKey"], tol, max_n=18)
 
-    # fallback for remaining gross/withholding (existing)
     still_mask = ((out["OurFlag"] == "") & (out["BrkFlag"] == "") &
                   (out["Type"].isin(["GROSS_DIV", "WITHHOLDING"])))
     if still_mask.any():
@@ -1077,13 +1085,12 @@ def auto_match_no_date(df: pd.DataFrame, tol: float = 0.01) -> pd.DataFrame:
 
     return out
 
+
 # --------------------------------------------------------------------------------------
 # UI helpers (produce JSON-safe rows)
 # --------------------------------------------------------------------------------------
 
-
 def _df_unmatched(df: pd.DataFrame) -> list[dict]:
-    # Handle no data
     if df is None or df.empty:
         return []
 
@@ -1093,7 +1100,6 @@ def _df_unmatched(df: pd.DataFrame) -> list[dict]:
     if out.empty:
         return []
 
-    # Always numeric before math (robust in EXE)
     out[COL_AT] = pd.to_numeric(
         out.get(COL_AT, 0.0),  errors="coerce").fillna(0.0)
     out[COL_BRK] = pd.to_numeric(
@@ -1116,7 +1122,6 @@ def _df_unmatched(df: pd.DataFrame) -> list[dict]:
 
 
 def _df_matched(df: pd.DataFrame) -> list[dict]:
-    # Handle no data
     if df is None or df.empty:
         return []
 
@@ -1126,7 +1131,6 @@ def _df_matched(df: pd.DataFrame) -> list[dict]:
     if out.empty:
         return []
 
-    # Always numeric before math (robust in EXE)
     out[COL_AT] = pd.to_numeric(
         out.get(COL_AT, 0.0),  errors="coerce").fillna(0.0)
     out[COL_BRK] = pd.to_numeric(
@@ -1149,7 +1153,7 @@ def _df_matched(df: pd.DataFrame) -> list[dict]:
 
 
 # --------------------------------------------------------------------------------------
-# Previous Rec import readers (no comments carry)
+# Previous Rec import readers
 # --------------------------------------------------------------------------------------
 def _read_prev_rec_xlsx(data: bytes) -> pd.DataFrame:
     xl = pd.ExcelFile(io.BytesIO(data))
@@ -1243,10 +1247,10 @@ def _read_prev_rec_csv(data: bytes) -> pd.DataFrame:
     out = out.dropna(subset=[COL_DATE]).reset_index(drop=True)
     return out
 
+
 # --------------------------------------------------------------------------------------
 # Routes
 # --------------------------------------------------------------------------------------
-
 
 @app.route("/")
 def index():
@@ -1259,7 +1263,7 @@ def index():
         tol=st.get("tol", 0.01),
         accounts=accounts,
         account=st.get("account", ""),
-        broker=st.get("broker", "Velocity"),  # NEW
+        broker=st.get("broker", "Velocity"),
     )
 
 
@@ -1267,10 +1271,10 @@ def index():
 def health():
     return "OK", 200
 
+
 @app.route("/view_rec", methods=["POST"])
 def view_rec():
     try:
-        # We expect JSON: { "account": "...", "broker": "..." }
         data = request.get_json(force=True) or {}
 
         account = (data.get("account") or "").strip()
@@ -1279,16 +1283,13 @@ def view_rec():
         if not account:
             return jsonify(ok=False, error="Please select an account first."), 400
 
-        # Normalize broker & build the same key used when saving
         broker_key = _pick_broker_key(broker_name)
         rec_key = make_rec_key(account, broker_key)
 
-        # Only look in persistent store for this Account+Broker
         df = None
         if mongo_handler.is_connected():
             df = mongo_handler.load_session_rec(rec_key)
 
-        # Nothing found → clear, friendly message back to UI
         if df is None or df.empty:
             return (
                 jsonify(
@@ -1301,51 +1302,26 @@ def view_rec():
                 404,
             )
 
-        # Make sure the frame looks like a normal working rec
         for col in [
-            COL_DATE,
-            COL_SYMBOL,
-            COL_DESC,
-            COL_AT,
-            COL_BRK,
-            "Comments",
-            "OurFlag",
-            "BrkFlag",
-            "MatchID",
+            COL_DATE, COL_SYMBOL, COL_DESC, COL_AT, COL_BRK,
+            "Comments", "OurFlag", "BrkFlag", "MatchID",
         ]:
             if col not in df.columns:
                 df[col] = "" if col not in (COL_AT, COL_BRK) else 0.0
 
-        df = df[
-            [
-                COL_DATE,
-                COL_SYMBOL,
-                COL_DESC,
-                COL_AT,
-                COL_BRK,
-                "Comments",
-                "OurFlag",
-                "BrkFlag",
-                "MatchID",
-            ]
-        ].copy()
+        df = df[[
+            COL_DATE, COL_SYMBOL, COL_DESC, COL_AT, COL_BRK,
+            "Comments", "OurFlag", "BrkFlag", "MatchID",
+        ]].copy()
         df["RowID"] = range(1, len(df) + 1)
 
-        # ✅ First update state so _save_df writes under the correct account+broker combo
         _save_state(account=account, broker=broker_key)
-
-        # Then save as the active session rec
         _save_df(df, "rec.pkl")
 
-        # Frontend will redirect to /recon after success
         return jsonify(ok=True)
     except Exception as e:
         traceback.print_exc()
         return jsonify(ok=False, error=f"Error loading existing reconciliation: {e}"), 500
-
-
-
-
 
 
 @app.route("/build_rec", methods=["POST"], endpoint="build_rec")
@@ -1355,11 +1331,9 @@ def build_rec_route():
         start_date = request.form.get("start_date", "").strip()
         end_date = request.form.get("end_date", "").strip()
         account = request.form.get("account", "").strip()
-        broker_name = (request.form.get("broker", "")
-                       or "Velocity").strip()  # NEW
-        broker_key = _pick_broker_key(broker_name)  # normalize once
+        broker_name = (request.form.get("broker", "") or "Velocity").strip()
+        broker_key = _pick_broker_key(broker_name)
 
-        # --- broker files: single vs multi (GTNA supports multiple CSVs) ---
         if broker_key in {"gtna", "gtn a", "gtn", "gtn asia"}:
             broker_files = [
                 fs for fs in request.files.getlist("broker_file") if fs]
@@ -1367,7 +1341,6 @@ def build_rec_route():
             bf = request.files.get("broker_file")
             broker_files = [bf] if bf else []
 
-        # Basic validation (allow multiple files for GTNA)
         if not at_file or not start_date or not end_date or len(broker_files) == 0:
             accounts = _accounts_load()
             return render_template(
@@ -1376,13 +1349,10 @@ def build_rec_route():
                 upload_error="Please provide both files and a valid date range.",
                 accounts=accounts,
                 account=account,
-                broker=broker_name,  # NEW
+                broker=broker_name,
             )
 
-        # Parse our AT file (unchanged)
         at_df = clean_at(at_file)
-
-        # NEW: Clean broker file(s) by selected broker
         account = (request.form.get("account") or "").strip()
 
         if broker_key in {"gtna", "gtn a", "gtn", "gtn asia"}:
@@ -1396,31 +1366,23 @@ def build_rec_route():
                         columns=["SettleDate", "ReportDate", "Symbol", "Description", "Amount"])
                 if df_part is not None and not df_part.empty:
                     parts.append(df_part)
-            broker_file = None  # keep old variable name unused for GTNA path
             broker_df = pd.concat(parts, ignore_index=True) if parts else pd.DataFrame(
-                columns=["SettleDate", "ReportDate",
-                         "Symbol", "Description", "Amount"]
-            )
+                columns=["SettleDate", "ReportDate", "Symbol", "Description", "Amount"])
         else:
-            # single-file path for other brokers (unchanged behavior)
             broker_file = broker_files[0] if broker_files else None
             broker_df = clean_broker_dispatch(
                 broker_file, start_date, end_date, broker_name, account)
 
-        # NEW: Build rec according to broker rules
         rec = build_rec_by_broker(at_df, broker_df, broker_name)
 
-        # Ensure numeric columns exist and are numeric (even when rec is empty)
         for c in (COL_AT, COL_BRK):
             if c not in rec.columns:
                 rec[c] = 0.0
         rec[COL_AT] = pd.to_numeric(rec[COL_AT], errors="coerce").fillna(0.0)
         rec[COL_BRK] = pd.to_numeric(rec[COL_BRK], errors="coerce").fillna(0.0)
 
-        # 1) Always save as active session rec for this browser tab
         _save_df(rec, "rec.pkl")
 
-        # 2) Also save a persistent copy per Account + Broker
         rec_key = make_rec_key(account, broker_key)
         if mongo_handler.is_connected():
             mongo_handler.save_session_rec(
@@ -1436,17 +1398,14 @@ def build_rec_route():
                 }
             )
 
-
-        # keep your state logic (for tolerance, EB, etc.)
         _save_state(
             tol=0.01,
             eb_at=None,
             eb_brk=None,
             account=account,
             recon_date="",
-            broker=broker_key  # persist normalized broker
+            broker=broker_key,
         )
-
 
         um = _df_unmatched(rec)
         stats = {
@@ -1467,7 +1426,7 @@ def build_rec_route():
             account=st.get("account", ""),
             recon_date=st.get("recon_date", ""),
             accounts=accounts,
-            broker=st.get("broker", "Velocity"),  # NEW
+            broker=st.get("broker", "Velocity"),
         )
     except Exception as e:
         traceback.print_exc()
@@ -1478,10 +1437,8 @@ def build_rec_route():
             upload_error=f"Build failed: {e}",
             accounts=accounts,
             account=request.form.get("account", "").strip(),
-            broker=request.form.get("broker", "Velocity"),  # NEW
+            broker=request.form.get("broker", "Velocity"),
         )
-
-
 
 
 @app.route("/run_automatch", methods=["POST"])
@@ -1494,7 +1451,6 @@ def run_automatch():
         body = request.get_json(silent=True) or {}
         st = _load_state()
 
-        # Use tol from request if provided; otherwise fall back to saved state; default 0.01.
         tol = None
         try:
             tol = float(body.get("tol", ""))
@@ -1505,10 +1461,6 @@ def run_automatch():
                 tol = float(st.get("tol", 0.01))
             except Exception:
                 tol = 0.01
-
-        # IMPORTANT: do not call _save_state() here — avoid races with save_meta.
-        # If you still want to persist tol on click, wrap in a best-effort try:
-        # try: _save_state(tol=tol) except Exception: pass
 
         df2 = prepare_frame_for_solver(df)
         df2 = auto_match_no_date(df2, tol=tol)
@@ -1544,7 +1496,7 @@ def view_matched():
         recon_date=st.get("recon_date", ""),
         tol=st.get("tol", 0.01),
         accounts=accounts,
-        broker=st.get("broker", "Velocity"),  # ✅ keep broker dropdown in sync
+        broker=st.get("broker", "Velocity"),
     )
 
 
@@ -1572,9 +1524,8 @@ def recon():
         account=st.get("account", ""),
         recon_date=st.get("recon_date", ""),
         accounts=accounts,
-        broker=st.get("broker", "Velocity"),  # ✅ keeps selected broker on screen
+        broker=st.get("broker", "Velocity"),
     )
-
 
 
 @app.route("/manual_pair", methods=["POST"])
@@ -1649,14 +1600,12 @@ def recall_matched():
         if df is None:
             return _json_err("No active data", 400)
 
-        # Map RowID -> df index
         map_rowid_to_idx = dict(zip(df["RowID"].astype(int), df.index))
         try:
             idxs = [map_rowid_to_idx[int(x)] for x in rowids]
         except Exception:
             return _json_err("Some RowIDs not found", 400)
 
-        # Collect selected MatchIDs (non-empty only)
         selected_match_ids = {
             str(df.at[i, "MatchID"]).strip()
             for i in idxs
@@ -1666,7 +1615,6 @@ def recall_matched():
         changed = 0
 
         if selected_match_ids:
-            # GROUP RECALL: unmatch all rows that share any of these MatchIDs
             group_mask = df["MatchID"].astype(str).isin(selected_match_ids)
             for i in df.index[df.index.isin(df.index[group_mask])]:
                 if df.at[i, "OurFlag"] == "MATCHED" or df.at[i, "BrkFlag"] == "MATCHED":
@@ -1675,12 +1623,10 @@ def recall_matched():
                     df.at[i, "MatchID"] = ""
                     changed += 1
 
-            # Also remove these MatchIDs from per-account history
             st = _load_state()
             account = (st.get("account") or "").strip()
             _history_delete_matchids(account, selected_match_ids)
         else:
-            # FALLBACK: no MatchID on selected rows → behave like row-by-row recall
             for i in idxs:
                 if df.at[i, "OurFlag"] == "MATCHED" or df.at[i, "BrkFlag"] == "MATCHED":
                     df.at[i, "OurFlag"] = ""
@@ -1720,8 +1666,6 @@ def update_comment():
         traceback.print_exc()
         return _json_err(f"Comment error: {e}", 500)
 
-# ---------- NEW: Update Symbol ----------
-
 
 @app.route("/update_symbol", methods=["POST"])
 def update_symbol():
@@ -1742,7 +1686,6 @@ def update_symbol():
         except Exception:
             return _json_err("RowID not found", 400)
 
-        # Update and persist
         df.at[idx, COL_SYMBOL] = sym
         _save_df(df, "rec.pkl")
         return _json_ok({"ok": True, "rowid": int(rowid), "symbol": sym})
@@ -1775,7 +1718,6 @@ def save_meta():
                 st["tol"] = float(body["tol"])
             except Exception:
                 pass
-        # NEW: persist broker if sent
         if "broker" in body:
             st["broker"] = (body.get("broker") or "").strip()
 
@@ -1785,30 +1727,23 @@ def save_meta():
         traceback.print_exc()
         return _json_err(f"Meta save error: {e}", 500)
 
-# ---------- Accounts API ----------
 
+# ---------- Accounts API ----------
 
 @app.route("/accounts/list", methods=["GET"])
 def accounts_list():
     broker_name = (request.args.get("broker") or "").strip()
     all_accounts = _accounts_load()
 
-    # No broker passed → old behaviour, show all accounts
     if not broker_name:
         return _json_ok({"accounts": all_accounts})
 
-    # Normalize broker
     broker_key = _pick_broker_key(broker_name)
-
-    # Load mapping { broker_key: [acc1, acc2, ...] }
     mapping = _accounts_by_broker_load()
     by_broker = mapping.get(broker_key, [])
-
-    # Safety: keep only accounts that still exist globally
     filtered = [a for a in by_broker if a in all_accounts]
 
     return _json_ok({"accounts": filtered})
-
 
 
 @app.route("/accounts/add", methods=["POST"])
@@ -1821,13 +1756,11 @@ def accounts_add():
         if not acc:
             return _json_err("Account cannot be empty", 400)
 
-        # Normal global list (same as before)
         accounts = _accounts_load()
         if acc not in accounts:
             accounts.append(acc)
             _accounts_save(accounts)
 
-        # NEW: link account to broker
         if broker_name:
             broker_key = _pick_broker_key(broker_name)
             mapping = _accounts_by_broker_load()
@@ -1844,7 +1777,6 @@ def accounts_add():
     except Exception as e:
         traceback.print_exc()
         return _json_err(f"Accounts add error: {e}", 500)
-
 
 
 @app.route("/accounts/delete", methods=["POST"])
@@ -1870,8 +1802,8 @@ def accounts_delete():
         traceback.print_exc()
         return _json_err(f"Accounts delete error: {e}", 500)
 
-# ---------- Carry-forward API ----------
 
+# ---------- Carry-forward API ----------
 
 @app.route("/carry/save", methods=["POST"])
 def carry_save():
@@ -1892,7 +1824,7 @@ def carry_save():
             COL_DESC: um["Description"].astype(str),
             COL_AT: pd.to_numeric(um["AT"], errors="coerce").fillna(0.0),
             COL_BRK: pd.to_numeric(um["Broker"], errors="coerce").fillna(0.0),
-            "Comments": um.get("Comments", "").astype(str),   # <— preserve
+            "Comments": um.get("Comments", "").astype(str),
         })
         out = out.dropna(subset=[COL_DATE]).reset_index(drop=True)
         _save_carry_for_account(account, out)
@@ -1916,7 +1848,6 @@ def carry_load():
         if df is None:
             return _json_err("No active data", 400)
         add = prev.copy()
-        # add["Comments"] = ""   # keep preserved comments
         add["OurFlag"] = ""
         add["BrkFlag"] = ""
         add["MatchID"] = ""
@@ -1930,8 +1861,8 @@ def carry_load():
         traceback.print_exc()
         return _json_err(f"Carry load error: {e}", 500)
 
-# ---------- Previous Rec import ----------
 
+# ---------- Previous Rec import ----------
 
 @app.route("/import_previous_rec", methods=["POST"])
 def import_previous_rec():
@@ -1958,7 +1889,6 @@ def import_previous_rec():
         if df is None:
             return _json_err("No active data", 400)
 
-        # Normalize columns and flags
         new_rows = new_rows[[COL_DATE, COL_SYMBOL, COL_DESC, COL_AT, COL_BRK, "Comments"]].copy()
         new_rows["OurFlag"] = ""
         new_rows["BrkFlag"] = ""
@@ -1969,10 +1899,8 @@ def import_previous_rec():
         merged = pd.concat([base, new_rows], ignore_index=True)
         merged["RowID"] = merged.index.astype(int) + 1
 
-        # 1) Save to current session
         _save_df(merged, "rec.pkl")
 
-        # 2) ALSO persist to Mongo for this Account + Broker
         st = _load_state()
         account = (st.get("account") or "").strip()
         broker_key = _pick_broker_key(st.get("broker") or "")
@@ -1995,8 +1923,7 @@ def import_previous_rec():
         return _json_err(f"Import failed: {e}", 500)
 
 
-# ---------- Manual Transactions Import (NEW) ----------
-
+# ---------- Manual Transactions Import ----------
 
 @app.route("/manual_add", methods=["POST"])
 def manual_add():
@@ -2006,8 +1933,6 @@ def manual_add():
 
     side: 'A' -> goes to AT column
           'B' -> goes to Broker column
-
-    Amount is used as provided (no sign flipping here).
     """
     try:
         file = request.files.get("tx_file")
@@ -2018,7 +1943,6 @@ def manual_add():
         file.stream.seek(0)
         fn = (file.filename or "").lower()
 
-        # Read CSV/XLSX into string-typed dataframe for robust cleaning
         if fn.endswith(".csv"):
             df_in = pd.read_csv(io.BytesIO(data), dtype=str)
         elif fn.endswith(".xlsx"):
@@ -2026,7 +1950,6 @@ def manual_add():
         else:
             return _json_err("Unsupported file type. Upload .csv or .xlsx", 400)
 
-        # Normalize columns
         df_in.columns = [str(c).strip() for c in df_in.columns]
         cmap = {c.lower(): c for c in df_in.columns}
         required = ["date", "symbol", "description", "amount", "side"]
@@ -2040,16 +1963,13 @@ def manual_add():
         c_amt = cmap["amount"]
         c_side = cmap["side"]
 
-        # Parse values
         def money(series: pd.Series) -> pd.Series:
             s = series.astype(str)
-            # strip commas and convert parentheses negatives
             s = s.str.replace(",", "", regex=False).str.replace(
                 r"\(([^)]+)\)", r"-\1", regex=True)
             return pd.to_numeric(s, errors="coerce").fillna(0.0)
 
         add = pd.DataFrame()
-        # Try dd/mm/yyyy first, then mm/dd/yyyy, and use whichever parses
         d_dayfirst = pd.to_datetime(
             df_in[c_date], errors="coerce", dayfirst=True)
         d_monthfirst = pd.to_datetime(
@@ -2062,7 +1982,6 @@ def manual_add():
         amt_series = money(df_in[c_amt])
         side_series = df_in[c_side].astype(str).str.strip().str.upper()
 
-        # Map side -> AT/Broker columns (no sign flip)
         add[COL_AT] = 0.0
         add[COL_BRK] = 0.0
         mask_a = side_series.eq("A")
@@ -2070,19 +1989,16 @@ def manual_add():
         add.loc[mask_a, COL_AT] = amt_series[mask_a]
         add.loc[mask_b, COL_BRK] = amt_series[mask_b]
 
-        # Discard rows without a valid Date
         add = add.dropna(subset=[COL_DATE]).reset_index(drop=True)
 
         if add.empty:
             return _json_err("No valid rows (check Date formats & side A/B)", 400)
 
-        # Default flags
         add["Comments"] = ""
         add["OurFlag"] = ""
         add["BrkFlag"] = ""
         add["MatchID"] = ""
 
-        # Merge into current rec
         df = _load_df("rec.pkl")
         if df is None:
             return _json_err("No active data. Build a reconciliation first.", 400)
@@ -2098,8 +2014,8 @@ def manual_add():
         traceback.print_exc()
         return _json_err(f"Manual add failed: {e}", 500)
 
-# ---------- History API ----------
 
+# ---------- History API ----------
 
 @app.route("/history/list", methods=["GET"])
 def history_list():
@@ -2133,21 +2049,17 @@ def history_recall():
             return _json_err("No rows provided", 400)
 
         pick = pd.DataFrame(rows)
-        # Extract MatchIDs (if provided)
         mids = set(
             str(m).strip()
             for m in pick.get("MatchID", pd.Series(dtype=str)).astype(str).tolist()
             if str(m).strip()
         )
 
-        # If MatchIDs are provided, prefer group-aware recall
         if mids:
             hist = _history_load(account)
 
-            # Check whether any of these MatchIDs already exist in the current session
             live_mask = df["MatchID"].astype(str).isin(mids)
             if live_mask.any():
-                # UNMATCH IN PLACE (avoid duplicates)
                 changed = 0
                 for i in df.index[df.index.isin(df.index[live_mask])]:
                     if df.at[i, "OurFlag"] == "MATCHED" or df.at[i, "BrkFlag"] == "MATCHED":
@@ -2156,8 +2068,6 @@ def history_recall():
                         df.at[i, "MatchID"] = ""
                         changed += 1
                 _save_df(df, "rec.pkl")
-
-                # Remove these groups from history as well
                 _history_delete_matchids(account, mids)
 
                 return _json_ok({
@@ -2167,7 +2077,6 @@ def history_recall():
                     "um": _df_unmatched(df)
                 })
 
-            # Else: bring the whole group(s) from history as new unmatched rows
             take = hist.loc[hist["MatchID"].astype(str).isin(mids)].copy()
             if take.empty:
                 return _json_err("No matching MatchID groups found in history", 404)
@@ -2182,8 +2091,7 @@ def history_recall():
                 take["AT"], errors="coerce").fillna(0.0)
             add_df[COL_BRK] = pd.to_numeric(
                 take["Broker"], errors="coerce").fillna(0.0)
-            add_df["Comments"] = take.get(
-                "Comments", "").astype(str)  # restore comments
+            add_df["Comments"] = take.get("Comments", "").astype(str)
             add_df["OurFlag"] = ""
             add_df["BrkFlag"] = ""
             add_df["MatchID"] = ""
@@ -2194,7 +2102,6 @@ def history_recall():
             merged = pd.concat([base, add_df], ignore_index=True)
             merged["RowID"] = merged.index.astype(int) + 1
             _save_df(merged, "rec.pkl")
-
             _history_delete_matchids(account, mids)
 
             return _json_ok({
@@ -2204,7 +2111,7 @@ def history_recall():
                 "um": _df_unmatched(merged)
             })
 
-        # ---- Legacy path: no MatchID provided (row-by-row recall) ----
+        # Legacy path: no MatchID provided
         add = pick.copy()
         if add.empty:
             return _json_err("No rows provided", 400)
@@ -2232,7 +2139,6 @@ def history_recall():
         merged["RowID"] = merged.index.astype(int) + 1
         _save_df(merged, "rec.pkl")
 
-        # If legacy payload carried MatchIDs, clean those groups from history, too
         legacy_mids = set(
             str(m).strip()
             for m in add.get("MatchID", pd.Series(dtype=str)).astype(str).tolist()
@@ -2248,12 +2154,7 @@ def history_recall():
 
 
 # ---------- Downloads ----------
-# --- helpers for safe filename parts & date normalization ---
 def _normalize_date_str(s) -> str:
-    """
-    Return YYYY-MM-DD from common inputs:
-    2025-10-11, 11/10/2025, 10/11/2025, 11-10-2025, 10-11-2025, 2025/10/11, 11 Oct 2025, Oct-11-2025, etc.
-    """
     def _try_parse(txt, fmts):
         for fmt in fmts:
             try:
@@ -2267,7 +2168,6 @@ def _normalize_date_str(s) -> str:
 
     s = str(s).strip()
 
-    # 1) direct common formats
     fmts = (
         "%Y-%m-%d", "%Y/%m/%d",
         "%d/%m/%Y", "%m/%d/%Y",
@@ -2280,31 +2180,25 @@ def _normalize_date_str(s) -> str:
     if dt:
         return dt.strftime("%Y-%m-%d")
 
-    # 2) ISO-like prefix: 2025-10-11T12:34 -> take first 10
     if len(s) >= 10 and s[4] in "-/" and s[7] in "-/":
         return s[:10].replace("/", "-")
 
-    # 3) compact digits? e.g. 20251011 or 11102025 (ddmmyyyy / yyyymmdd)
     m = re.fullmatch(r"(\d{8})", s)
     if m:
         raw = m.group(1)
-        # try yyyymmdd
         try:
             return datetime.strptime(raw, "%Y%m%d").strftime("%Y-%m-%d")
         except ValueError:
             pass
-        # try ddmmyyyy
         try:
             return datetime.strptime(raw, "%d%m%Y").strftime("%Y-%m-%d")
         except ValueError:
             pass
 
-    # fallback: today
     return datetime.now().strftime("%Y-%m-%d")
 
 
 def _slug(s: str, fallback: str = "Unknown") -> str:
-    """Make a filesystem-safe token (remove spaces & specials)."""
     s = (s or "").strip() or fallback
     s = re.sub(r"\s+", "", s)
     s = re.sub(r"[^A-Za-z0-9_\-]+", "", s)
@@ -2312,24 +2206,16 @@ def _slug(s: str, fallback: str = "Unknown") -> str:
 
 
 @app.route("/download_recon", methods=["POST"])
-# Define a function that builds and downloads a reconciliation workbook as an Excel file.
 def download_recon():
-    # Wrap the whole routine in try/except so errors return a controlled HTTP response.
     try:
-        # Load the working reconciliation DataFrame from a cached pickle file.
         df = _load_df("rec.pkl")
-        # If no data is present, exit early with a 400 Bad Request and message.
         if df is None:
             return ("No active data", 400)
 
-        # Load persisted UI/state values (account, broker, dates, balances, etc.).
         st = _load_state()
-        # Create a DataFrame of currently unmatched items (the breaks to review).
         um = pd.DataFrame(_df_unmatched(df))
         um.rename(columns={"DateKey": "Date", COL_DESC: "Description"}, inplace=True)
 
-
-        # Clean numeric columns
         for col in ["AT", "Broker", "Difference"]:
             if col in um.columns:
                 um[col] = (
@@ -2338,12 +2224,8 @@ def download_recon():
                     .fillna(0.0)
                 )
 
-
-        # Allocate an in-memory buffer to assemble the Excel file (no disk I/O).
         buf = io.BytesIO()
-        # Prefer the xlsxwriter engine (richer formatting), else fall back gracefully.
         try:
-            # Try using xlsxwriter for fine-grained formatting control.
             writer = pd.ExcelWriter(
                 buf,
                 engine="xlsxwriter",
@@ -2351,144 +2233,83 @@ def download_recon():
             )
             use_xlsxwriter = True
         except Exception:
-            # If xlsxwriter isn't available, switch to openpyxl (basic writing).
             writer = pd.ExcelWriter(buf, engine="openpyxl")
-            # Flag that we must take the simpler path without formats.
             use_xlsxwriter = False
 
-        # Use the writer as a context manager so it saves/flushes automatically.
         with writer as xw:
-            # If xlsxwriter is available, build styled worksheets manually.
             if use_xlsxwriter:
-                # Add a primary worksheet called "Recon".
                 sh = xw.book.add_worksheet("Recon")
-                # Register it so writer is aware of this sheet by name.
                 xw.sheets["Recon"] = sh
 
-                # Define a bold, colored, bordered header format for table headers.
                 f_hdr = xw.book.add_format(
                     {"bold": True, "bg_color": "#9bd1f7", "border": 1, "align": "center"})
-                # Define a bold label format for field names.
                 f_lab = xw.book.add_format({"bold": True, "border": 1})
-                # Define a generic value format with borders.
                 f_val = xw.book.add_format({"border": 1})
-                # Define a currency/number format with red negatives and borders.
                 f_money = xw.book.add_format(
                     {"num_format": "#,##0.00;[Red](#,##0.00)", "border": 1})
-                # Define a small italic format for helper notes.
                 f_small = xw.book.add_format({"italic": True, "font_size": 9})
 
-                # Set column B width for dates.
                 sh.set_column("B:B", 12)
-                # Set wider columns for symbol and description.
                 sh.set_column("C:D", 28)
-                # Set medium width for money columns.
                 sh.set_column("E:F", 22)
-                # Set width for difference and comments columns.
                 sh.set_column("G:H", 18)
 
-                # Write the "Date" label cell.
                 sh.write("B2", "Date", f_lab)
-                # Write the reconciliation date from state (or empty if missing).
                 sh.write("C2", st.get("recon_date") or "", f_val)
-                # Add a gentle hint that the date can be updated manually.
                 sh.write("D2", "Manually Update", f_small)
-                # Write the "Account" label cell.
                 sh.write("B5", "Account", f_lab)
-                # Write the account identifier/name from state.
                 sh.write("C5", st.get("account") or "", f_val)
 
-                # Define a helper that writes currency cells or leaves them blank when ~zero.
                 def write_money_or_blank(ws, r, c, v):
-                    """
-                    Safe writer for numeric cells: never passes NaN/Inf to write_number().
-                    """
-                    # Try convert to float
                     try:
                         n = float(v)
                     except Exception:
                         n = 0.0
-
-                    # Treat NaN/Inf as zero
                     if not math.isfinite(n):
                         n = 0.0
-
-                    # If effectively zero, show blank
                     if abs(n) < 1e-9:
                         ws.write(r, c, "", f_val)
                     else:
                         ws.write_number(r, c, n, f_money)
 
-
-
-                # Read ending balance (AT) from state with a safe numeric default.
-                eb_at = float(st.get("eb_at")) if st.get(
-                    "eb_at") is not None else 0.0
-                # Read ending balance (Broker) from state with a safe numeric default.
-                eb_brk = float(st.get("eb_brk")) if st.get(
-                    "eb_brk") is not None else 0.0
-                # Compute the ending balance difference (broker minus AT), rounded to cents.
+                eb_at = float(st.get("eb_at")) if st.get("eb_at") is not None else 0.0
+                eb_brk = float(st.get("eb_brk")) if st.get("eb_brk") is not None else 0.0
                 eb_diff = round(eb_brk - eb_at, 2)
-                # Sum unmatched Differences to get the transaction total (robust to empties/NAs).
                 txn_total = round(float(um.get("Difference", pd.Series(
                     [])).fillna(0).sum()), 2) if not um.empty else 0.0
-                # Compute the final difference after applying transaction total against EB diff.
                 final_diff = round(txn_total - eb_diff, 2)
 
-                # Label and write the AT ending balance with money formatting.
                 sh.write("E2", "Ending balance  AT", f_lab)
                 write_money_or_blank(sh, 1, 5, eb_at)
-                # Label and write the broker ending balance.
                 sh.write("E3", "Ending balance broker", f_lab)
                 write_money_or_blank(sh, 2, 5, eb_brk)
-                # Label and write the EB difference.
                 sh.write("E4", "Ending Balance Difference", f_lab)
                 write_money_or_blank(sh, 3, 5, eb_diff)
-                # Label and write the transaction total from unmatched items.
                 sh.write("E5", "Transaction Total", f_lab)
                 write_money_or_blank(sh, 4, 5, txn_total)
-                # Label and write the final difference for reconciliation status.
                 sh.write("E6", "Final Difference", f_lab)
                 write_money_or_blank(sh, 5, 5, final_diff)
 
-                # Choose a starting row index for the unmatched table (adds top spacing).
                 start_row = 8
-                # Define headers for the unmatched (Recon) detail table.
                 headers = ["Date", "Symbol", "Description",
                            "AT", "Broker", "Difference", "Comments"]
-                # Write table headers with header format, starting at column index 1 (column B).
                 for c, h in enumerate(headers, start=2):
                     sh.write(start_row, c - 1, h, f_hdr)
 
-                # Initialize the first data row just under the headers.
                 r = start_row + 1
-                # If there are unmatched rows, write them out one per row.
                 if not um.empty:
-                    # Iterate through each row to populate the Recon table.
                     for _, row in um.iterrows():
-                        # Write the Date value (column B).
                         sh.write(r, 1, row.get("Date") or "", f_val)
-                        # Write the Symbol value (column C).
                         sh.write(r, 2, row.get("Symbol") or "", f_val)
-                        # Write the Description value (column D).
                         sh.write(r, 3, row.get("Description") or "", f_val)
-                        # Write the AT amount (column E) with currency formatting.
                         write_money_or_blank(sh, r, 4, row.get("AT", 0.0))
-                        # Write the Broker amount (column F) with currency formatting.
                         write_money_or_blank(sh, r, 5, row.get("Broker", 0.0))
-                        # Write the Difference amount (column G) with currency formatting.
-                        write_money_or_blank(
-                            sh, r, 6, row.get("Difference", 0.0))
-                        # Write any Comments (column H) as plain text.
+                        write_money_or_blank(sh, r, 6, row.get("Difference", 0.0))
                         sh.write(r, 7, row.get("Comments") or "", f_val)
-                        # Advance to the next output row.
                         r += 1
-                # Freeze panes to keep headers/left columns visible while scrolling.
                 sh.freeze_panes(start_row + 1, 2)
 
-                # Normalize the account string and load historical cleared breaks for it.
                 account = (st.get("account") or "").strip()
-                # Load existing persisted history for "Cleared Breaks".
                 hist = _history_load(account)
 
                 if not hist.empty:
@@ -2499,101 +2320,58 @@ def download_recon():
                                 .replace([np.inf, -np.inf], np.nan)
                                 .fillna(0.0)
                             )
-
-
-                    # Reload history so the sheet reflects the newly appended records.
                     hist = _history_load(account)
 
-                # Add a second worksheet for listing previously cleared (matched) breaks.
                 sh2 = xw.book.add_worksheet("Cleared Breaks")
-                # Register this sheet with the writer by name.
                 xw.sheets["Cleared Breaks"] = sh2
-                # Set a compact date column width.
                 sh2.set_column("A:A", 12)
-                # Widen symbol/description columns for readability.
                 sh2.set_column("B:C", 28)
-                # Set widths for money columns.
                 sh2.set_column("D:E", 18)
-                # Set width for MatchID column.
                 sh2.set_column("F:F", 16)
-                # Set width for Comments column.
                 sh2.set_column("G:G", 28)
 
-                # Define the headers for the Cleared Breaks table.
                 hdr2 = ["Date", "Symbol", "Description", "AT",
                         "Broker", "MatchID", "Comments", "SavedAt"]
-                # Reuse a styled header format for the cleared list.
                 hdr_fmt = xw.book.add_format(
                     {"bold": True, "bg_color": "#9bd1f7", "border": 1, "align": "center"})
-                # Write the header row at the top (row 0).
                 for c, h in enumerate(hdr2):
                     sh2.write(0, c, h, hdr_fmt)
 
-                # Start writing history rows just under the header.
                 rr = 1
-                # If there is historical data, sort and write it out.
                 if not hist.empty:
-                    # Sort to achieve stable, meaningful ordering (mergesort is stable).
                     hist = hist.sort_values(
                         ["Date", "MatchID", "Symbol"], kind="mergesort")
-                    # Populate each row of the Cleared Breaks sheet.
                     for _, row in hist.iterrows():
-                        # Write the Date value.
                         sh2.write(rr, 0, row.get("Date", ""), f_val)
-                        # Write the Symbol string.
-                        sh2.write(rr, 1, str(
-                            row.get("Symbol", "")) or "", f_val)
-                        # Write the Description string.
-                        sh2.write(rr, 2, str(
-                            row.get("Description", "")) or "", f_val)
-                        # Write the AT amount using money-or-blank logic.
+                        sh2.write(rr, 1, str(row.get("Symbol", "")) or "", f_val)
+                        sh2.write(rr, 2, str(row.get("Description", "")) or "", f_val)
                         write_money_or_blank(sh2, rr, 3, row.get("AT", 0.0))
-                        # Write the Broker amount similarly.
-                        write_money_or_blank(
-                            sh2, rr, 4, row.get("Broker", 0.0))
-                        # Write the MatchID (as string to avoid numeric formatting).
-                        sh2.write(rr, 5, str(
-                            row.get("MatchID", "")) or "", f_val)
-                        # Write any Comments text.
-                        sh2.write(rr, 6, str(
-                            row.get("Comments", "")) or "", f_val)
-                        # Write the SavedAt timestamp text.
-                        sh2.write(rr, 7, str(
-                            row.get("SavedAt", "")) or "", f_val)
-                        # Advance to the next row.
+                        write_money_or_blank(sh2, rr, 4, row.get("Broker", 0.0))
+                        sh2.write(rr, 5, str(row.get("MatchID", "")) or "", f_val)
+                        sh2.write(rr, 6, str(row.get("Comments", "")) or "", f_val)
+                        sh2.write(rr, 7, str(row.get("SavedAt", "")) or "", f_val)
                         rr += 1
             else:
-                # If we only have openpyxl, export simple sheets without custom styling.
                 um.to_excel(xw, index=False, sheet_name="Recon")
-                # Also export the cleared history for the account to its own sheet.
                 _history_load((st.get("account") or "").strip()).to_excel(
                     xw, index=False, sheet_name="Cleared Breaks")
 
-        # Reset the buffer position so Flask's send_file reads from the start.
         buf.seek(0)
-        # Build a YYYYMMDD tag from the recon_date (or today's date) for the filename.
         date_tag = (st.get("recon_date") or datetime.now().strftime(
             "%Y-%m-%d")).replace("-", "")
-        # Derive a safe Broker Name for the filename; try multiple keys, then default.
         broker_name = _safe_account_name(
             st.get("broker_name") or st.get("broker") or "Broker")
-        # Derive a safe Account Number for the filename; fall back to 'account' if needed.
         account_num = _safe_account_name(
             st.get("account_number") or st.get("account") or "Account")
-        # Construct the requested filename format: BrokerName_AccountNumber_ReconDate.xlsx
         out_name = f"{broker_name}_{account_num}_{date_tag}.xlsx"
-        # Send the in-memory workbook to the client as a downloadable Excel attachment.
         return send_file(
             buf,
             as_attachment=True,
             download_name=out_name,
             mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
-    # Handle any unexpected exceptions to avoid crashing the request.
     except Exception as e:
-        # Log the full traceback to aid debugging on the server side.
         traceback.print_exc()
-        # Return a 500 Internal Server Error with the message for visibility.
         return ("Recon export error: " + str(e), 500)
 
 
@@ -2642,10 +2420,10 @@ def reset_session():
     session.pop("sid", None)
     return redirect(url_for("index"))
 
+
 # --------------------------------------------------------------------------------------
 # Run (works for python + PyInstaller EXE)
 # --------------------------------------------------------------------------------------
-
 
 def _is_listening(host: str, port: int) -> bool:
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -2663,13 +2441,13 @@ def _is_listening(host: str, port: int) -> bool:
 
 
 def _open_browser_when_ready():
-    for _ in range(60):  # ~12 seconds total
+    for _ in range(60):
         if _is_listening(HOST, PORT):
             try:
                 webbrowser.open_new(URL)
             except Exception:
                 try:
-                    os.startfile(URL)  # Windows fallback
+                    os.startfile(URL)
                 except Exception:
                     pass
             return
@@ -2685,11 +2463,10 @@ def _open_browser_when_ready():
 
 if __name__ == "__main__":
     multiprocessing.freeze_support()
-    
-    # Only open browser if running locally (not in production/Railway)
+
     is_production = _IS_CONTAINER
     if not is_production:
         threading.Thread(target=_open_browser_when_ready, daemon=True).start()
-    
+
     app.run(host=HOST, port=PORT, debug=False,
             use_reloader=False, threaded=True)
